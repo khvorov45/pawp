@@ -55,24 +55,54 @@ decode(Arena* arena, prb_Bytes input) {
 
             u8 byte2 = input.data[offset + 1];
             u8 mod = byte2 >> 6;
+            u8 reg = (byte2 & 0b00111000) >> 3;
+            u8 rm = byte2 & 0b00000111;
+
+            char* eqs[] = {"bx + si", "bx + di", "bp + si", "bp + di", "si", "di", "bp", "bx"};
+
+            char* regStr = getRegStr(reg, wbit);
+            char* eqStr = eqs[rm];
 
             switch (mod) {
                 case 0b00: {
-                    assert(!"unimplemented");
+                    assert(rm != 0b110);
+
+                    if (dbit) {
+                        prb_addStrSegment(&gstr, "mov %s, [%s]\n", regStr, eqStr);
+                    } else {
+                        prb_addStrSegment(&gstr, "mov [%s], %s\n", eqStr, regStr);
+                    }
+
+                    offset += 2;
                 } break;
 
                 case 0b01: {
-                    assert(!"unimplemented");
+                    u8 byte3 = input.data[offset + 2];
+
+                    if (dbit) {
+                        prb_addStrSegment(&gstr, "mov %s, [%s + %d]\n", regStr, eqStr, byte3);
+                    } else {
+                        prb_addStrSegment(&gstr, "mov [%s + %d], %s\n", eqStr, byte3, regStr);
+                    }
+
+                    offset += 3;
                 } break;
 
                 case 0b10: {
-                    assert(!"unimplemented");
+                    u8 byte3 = input.data[offset + 2];
+                    u8 byte4 = input.data[offset + 3];
+                    u16 val = ((u16)byte4 << 8) | (u16)byte3;
+
+                    if (dbit) {
+                        prb_addStrSegment(&gstr, "mov %s, [%s + %d]\n", regStr, eqStr, val);
+                    } else {
+                        prb_addStrSegment(&gstr, "mov [%s + %d], %s\n", eqStr, val, regStr);
+                    }
+
+                    offset += 4;
                 } break;
 
                 case 0b11: {
-                    u8 reg = (byte2 & 0b00111000) >> 3;
-                    u8 rm = byte2 & 0b00000111;
-
                     u8 destReg = reg;
                     u8 srcReg = rm;
                     if (!dbit) {
@@ -140,7 +170,6 @@ main() {
     Arena  arena_ = prb_createArenaFromVmem(1 * prb_GIGABYTE);
     Arena* arena = &arena_;
 
-    test_decode(arena, STR("bits 16\nmov cx, bx"));
     test_decode(
         arena,
         STR(
@@ -156,27 +185,20 @@ main() {
             "mov bx, si\n"
             "mov sp, di\n"
             "mov bp, ax\n"
-        )
-    );
-
-    test_decode(
-        arena,
-        STR(
-            "bits 16\n"
             "mov si, bx\n"
             "mov dh, al\n"
             "mov cx, 12\n"
             "mov cx, -12\n"
             "mov dx, 3948\n"
             "mov dx, -3948\n"
-            // "mov al, [bx + si]\n"
-            // "mov bx, [bp + di]\n"
-            // "mov dx, [bp]\n"
-            // "mov ah, [bx + si + 4]\n"
-            // "mov al, [bx + si + 4999]\n"
-            // "mov [bx + di], cx\n"
-            // "mov [bp + si], cl\n"
-            // "mov [bp], ch\n"
+            "mov al, [bx + si]\n"
+            "mov bx, [bp + di]\n"
+            "mov dx, [bp]\n"
+            "mov ah, [bx + si + 4]\n"
+            "mov al, [bx + si + 4999]\n"
+            "mov [bx + di], cx\n"
+            "mov [bp + si], cl\n"
+            "mov [bp], ch\n"
         )
     );
 
