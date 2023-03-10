@@ -51,7 +51,13 @@ decode(Arena* arena, prb_Bytes input) {
         u8    byte1 = input.data[offset];
         char* eqs[] = {"bx + si", "bx + di", "bp + si", "bp + di", "si", "di", "bp", "bx"};
 
-        if ((byte1 & 0b11111100) == 0b10001000) {
+        bool isRegRegMov = (byte1 & 0b11111100) == 0b10001000;
+        bool isRegRegArithmetic = (byte1 & 0b11000100) == 0b00000000;
+        bool isImmToRmMov = (byte1 & 0b11111110) == 0b11000110;
+        bool isImmToRmArithmetic = (byte1 & 0b11111100) == 0b10000000;
+        bool isImmToAxMov = (byte1 & 0b11111110) == 0b10100000;
+        bool isImmToAxArithmetic = (byte1 & 0b11000110) == 0b00000100;
+        if (isRegRegMov || isRegRegArithmetic) {
             bool dbit = (byte1 & 0b10) != 0;
             bool wbit = (byte1 & 0b1) != 0;
 
@@ -63,6 +69,18 @@ decode(Arena* arena, prb_Bytes input) {
             char* regStr = getRegStr(reg, wbit);
             char* eqStr = eqs[rm];
 
+            if (isRegRegArithmetic) {
+                u8 instr = byte1 & 0b00111000;
+                switch (instr) {
+                    case 0b00000000: prb_addStrSegment(&gstr, "add "); break;
+                    case 0b00101000: prb_addStrSegment(&gstr, "sub "); break;
+                    case 0b00111000: prb_addStrSegment(&gstr, "cmp "); break;
+                    default: assert(!"unimplemented");
+                }
+            } else {
+                prb_addStrSegment(&gstr, "mov ");
+            }
+
             switch (mod) {
                 case 0b00: {
                     if (rm == 0b110) {
@@ -71,17 +89,17 @@ decode(Arena* arena, prb_Bytes input) {
                         u16 address = ((u16)byte4 << 8) | (u16)byte3;
 
                         if (dbit) {
-                            prb_addStrSegment(&gstr, "mov %s, [%d]\n", regStr, address);
+                            prb_addStrSegment(&gstr, "%s, [%d]\n", regStr, address);
                         } else {
-                            prb_addStrSegment(&gstr, "mov [%d], %s,\n", address, regStr);
+                            prb_addStrSegment(&gstr, "[%d], %s,\n", address, regStr);
                         }
 
                         offset += 4;
                     } else {
                         if (dbit) {
-                            prb_addStrSegment(&gstr, "mov %s, [%s]\n", regStr, eqStr);
+                            prb_addStrSegment(&gstr, "%s, [%s]\n", regStr, eqStr);
                         } else {
-                            prb_addStrSegment(&gstr, "mov [%s], %s\n", eqStr, regStr);
+                            prb_addStrSegment(&gstr, "[%s], %s\n", eqStr, regStr);
                         }
 
                         offset += 2;
@@ -96,9 +114,9 @@ decode(Arena* arena, prb_Bytes input) {
                     }
 
                     if (dbit) {
-                        prb_addStrSegment(&gstr, "mov %s, [%s + %d]\n", regStr, eqStr, val);
+                        prb_addStrSegment(&gstr, "%s, [%s + %d]\n", regStr, eqStr, val);
                     } else {
-                        prb_addStrSegment(&gstr, "mov [%s + %d], %s\n", eqStr, val, regStr);
+                        prb_addStrSegment(&gstr, "[%s + %d], %s\n", eqStr, val, regStr);
                     }
 
                     offset += 3;
@@ -110,9 +128,9 @@ decode(Arena* arena, prb_Bytes input) {
                     u16 val = ((u16)byte4 << 8) | (u16)byte3;
 
                     if (dbit) {
-                        prb_addStrSegment(&gstr, "mov %s, [%s + %d]\n", regStr, eqStr, val);
+                        prb_addStrSegment(&gstr, "%s, [%s + %d]\n", regStr, eqStr, val);
                     } else {
-                        prb_addStrSegment(&gstr, "mov [%s + %d], %s\n", eqStr, val, regStr);
+                        prb_addStrSegment(&gstr, "[%s + %d], %s\n", eqStr, val, regStr);
                     }
 
                     offset += 4;
@@ -126,13 +144,13 @@ decode(Arena* arena, prb_Bytes input) {
                         srcReg = reg;
                     }
 
-                    prb_addStrSegment(&gstr, "mov %s, %s\n", getRegStr(destReg, wbit), getRegStr(srcReg, wbit));
+                    prb_addStrSegment(&gstr, "%s, %s\n", getRegStr(destReg, wbit), getRegStr(srcReg, wbit));
                     offset += 2;
                 } break;
 
                 default: assert(!"unreachable"); break;
             }
-        } else if ((byte1 & 0b11111110) == 0b11000110) {
+        } else if (isImmToRmMov || isImmToRmArithmetic) {
             bool wbit = (byte1 & 0b1) != 0;
 
             u8 byte2 = input.data[offset + 1];
@@ -140,27 +158,55 @@ decode(Arena* arena, prb_Bytes input) {
             u8 mod = byte2 >> 6;
 
             u8 reg = (byte2 & 0b00111000) >> 3;
-            assert(reg == 0);
+
+            if (isImmToRmArithmetic) {
+                u8 instr = byte2 & 0b00111000;
+                switch (instr) {
+                    case 0b00000000: prb_addStrSegment(&gstr, "add "); break;
+                    case 0b00101000: prb_addStrSegment(&gstr, "sub "); break;
+                    case 0b00111000: prb_addStrSegment(&gstr, "cmp "); break;
+                    default: assert(!"unimplemented");
+                }
+            } else {
+                assert(reg == 0);
+                prb_addStrSegment(&gstr, "mov ");
+            }
 
             u8    rm = byte2 & 0b00000111;
             char* eqStr = eqs[rm];
 
             switch (mod) {
                 case 0b00: {
-                    assert(rm != 0b110);
+                    bool sbit = (byte1 & 0b10) != 0;
+
+                    if (rm == 0b110) {
+                        u8  byte3 = input.data[offset + 2];
+                        u8  byte4 = input.data[offset + 3];
+                        u16 disp = ((u16)byte4 << 8) | (u16)byte3;
+                        prb_addStrSegment(&gstr, "[%d], ", disp);
+                        offset += 2;
+                    } else {
+                        prb_addStrSegment(&gstr, "[%s], ", eqStr);
+                    }
+
                     u8    byte3 = input.data[offset + 2];
                     u16   val = byte3;
                     char* size = "byte";
-                    if (wbit) {
+
+                    bool readByte4 = wbit && (!isImmToRmArithmetic || !sbit);
+                    if (readByte4) {
                         u8 byte4 = input.data[offset + 3];
                         val = ((u16)byte4 << 8) | val;
+                    }
+
+                    if (wbit) {
                         size = "word";
                     }
 
-                    prb_addStrSegment(&gstr, "mov [%s], %s %d\n", eqStr, size, val);
+                    prb_addStrSegment(&gstr, "%s %d\n", size, val);
 
                     offset += 3;
-                    if (wbit) {
+                    if (readByte4) {
                         offset += 1;
                     }
                 } break;
@@ -170,6 +216,8 @@ decode(Arena* arena, prb_Bytes input) {
                 } break;
 
                 case 0b10: {
+                    bool sbit = (byte1 & 0b10) != 0;
+
                     u8  byte3 = input.data[offset + 2];
                     u8  byte4 = input.data[offset + 3];
                     u16 disp = ((u16)byte4 << 8) | (u16)byte3;
@@ -177,22 +225,47 @@ decode(Arena* arena, prb_Bytes input) {
                     u8    byte5 = input.data[offset + 4];
                     u16   val = byte5;
                     char* size = "byte";
-                    if (wbit) {
+                    bool  readByte6 = wbit && (!isImmToRmArithmetic || !sbit);
+                    if (readByte6) {
                         u8 byte6 = input.data[offset + 5];
                         val = ((u16)byte6 << 8) | val;
+                    }
+
+                    if (wbit) {
                         size = "word";
                     }
 
-                    prb_addStrSegment(&gstr, "mov [%s + %d], %s %d\n", eqStr, disp, size, val);
+                    prb_addStrSegment(&gstr, "[%s + %d], %s %d\n", eqStr, disp, size, val);
 
                     offset += 5;
-                    if (wbit) {
+                    if (readByte6) {
                         offset += 1;
                     }
                 } break;
 
                 case 0b11: {
-                    assert(!"unimplemented");
+                    assert(isImmToRmArithmetic);
+
+                    char* regStr = getRegStr(rm, wbit);
+                    prb_addStrSegment(&gstr, "%s, ", regStr);
+
+                    bool sbit = (byte1 & 0b10) != 0;
+                    u8   byte3 = input.data[offset + 2];
+                    if (!sbit && wbit) {
+                        u16 val = byte3;
+                        u8  byte4 = input.data[offset + 3];
+                        val = ((u16)byte4 << 8) | val;
+                        prb_addStrSegment(&gstr, "%d\n", val);
+                    } else if (sbit) {
+                        assert(wbit);
+                        i16 val = byte3;
+                        prb_addStrSegment(&gstr, "%d\n", val);
+                    }
+
+                    offset += 3;
+                    if (wbit && !sbit) {
+                        offset += 1;
+                    }
                 } break;
 
                 default: assert(!"unreachable"); break;
@@ -213,16 +286,38 @@ decode(Arena* arena, prb_Bytes input) {
             if (wbit) {
                 offset += 1;
             }
-        } else if ((byte1 & 0b11111110) == 0b10100000) {
+        } else if (isImmToAxMov || isImmToAxArithmetic) {
             bool wbit = (byte1 & 0b1) != 0;
             u8   byte2 = input.data[offset + 1];
             u16  address = byte2;
+
             if (wbit) {
                 u8 byte3 = input.data[offset + 2];
                 address = ((u16)byte3 << 8) | address;
             }
 
-            prb_addStrSegment(&gstr, "mov ax, [%d]\n", address);
+            char* regName = "ax";
+            if (!wbit) {
+                regName = "al";
+            }
+
+            if (isImmToAxArithmetic) {
+                u8 instr = byte1 & 0b00111000;
+                switch (instr) {
+                    case 0b00000000: prb_addStrSegment(&gstr, "add "); break;
+                    case 0b00101000: prb_addStrSegment(&gstr, "sub "); break;
+                    case 0b00111000: prb_addStrSegment(&gstr, "cmp "); break;
+                    default: assert(!"unimplemented");
+                }
+                i16 value = address;
+                if (!wbit) {
+                    value = 0b1111111100000000 | (u16)byte2;
+                }
+                prb_addStrSegment(&gstr, "%s, %d\n", regName, value);
+            } else {
+                prb_addStrSegment(&gstr, "mov %s, [%d]\n", regName, address);
+            }
+
             offset += 2;
             if (wbit) {
                 offset += 1;
@@ -282,6 +377,7 @@ main() {
         arena,
         STR(
             "bits 16\n"
+
             "mov cx, bx\n"
             "mov ch, ah\n"
             "mov dx, bx\n"
@@ -318,6 +414,81 @@ main() {
             "mov ax, [16]\n"
             "mov [2554], ax\n"
             "mov [15], ax\n"
+
+            "add bx, [bx+si]\n"
+            "add bx, [bp]\n"
+            "add si, 2\n"
+            "add bp, 2\n"
+            "add cx, 8\n"
+            "add bx, [bp + 0]\n"
+            "add cx, [bx + 2]\n"
+            "add bh, [bp + si + 4]\n"
+            "add di, [bp + di + 6]\n"
+            "add [bx+si], bx\n"
+            "add [bp], bx\n"
+            "add [bp + 0], bx\n"
+            "add [bx + 2], cx\n"
+            "add [bp + si + 4], bh\n"
+            "add [bp + di + 6], di\n"
+            "add byte [bx], 34\n"
+            "add word [bp + si + 1000], 29\n"
+            "add ax, [bp]\n"
+            "add al, [bx + si]\n"
+            "add ax, bx\n"
+            "add al, ah\n"
+            "add ax, 1000\n"
+            "add al, -30\n"
+            "add al, 9\n"
+
+            "sub bx, [bx+si]\n"
+            "sub bx, [bp]\n"
+            "sub si, 2\n"
+            "sub bp, 2\n"
+            "sub cx, 8\n"
+            "sub bx, [bp + 0]\n"
+            "sub cx, [bx + 2]\n"
+            "sub bh, [bp + si + 4]\n"
+            "sub di, [bp + di + 6]\n"
+            "sub [bx+si], bx\n"
+            "sub [bp], bx\n"
+            "sub [bp + 0], bx\n"
+            "sub [bx + 2], cx\n"
+            "sub [bp + si + 4], bh\n"
+            "sub [bp + di + 6], di\n"
+            "sub byte [bx], 34\n"
+            "sub word [bx + di], 29\n"
+            "sub ax, [bp]\n"
+            "sub al, [bx + si]\n"
+            "sub ax, bx\n"
+            "sub al, ah\n"
+            "sub ax, 1000\n"
+            "sub al, -30\n"
+            "sub al, 9\n"
+
+            "cmp bx, [bx+si]\n"
+            "cmp bx, [bp]\n"
+            "cmp si, 2\n"
+            "cmp bp, 2\n"
+            "cmp cx, 8\n"
+            "cmp bx, [bp + 0]\n"
+            "cmp cx, [bx + 2]\n"
+            "cmp bh, [bp + si + 4]\n"
+            "cmp di, [bp + di + 6]\n"
+            "cmp [bx+si], bx\n"
+            "cmp [bp], bx\n"
+            "cmp [bp + 0], bx\n"
+            "cmp [bx + 2], cx\n"
+            "cmp [bp + si + 4], bh\n"
+            "cmp [bp + di + 6], di\n"
+            "cmp byte [bx], 34\n"
+            "cmp word [4834], 29\n"
+            "cmp ax, [bp]\n"
+            "cmp al, [bx + si]\n"
+            "cmp ax, bx\n"
+            "cmp al, ah\n"
+            "cmp ax, 1000\n"
+            "cmp al, -30\n"
+            "cmp al, 9\n"
         )
     );
 
