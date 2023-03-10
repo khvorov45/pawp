@@ -389,8 +389,11 @@ main() {
             "mov bx, si\n"
             "mov sp, di\n"
             "mov bp, ax\n"
+
             "mov si, bx\n"
             "mov dh, al\n"
+            "mov cl, 12\n"
+            "mov ch, -12\n"
             "mov cx, 12\n"
             "mov cx, -12\n"
             "mov dx, 3948\n"
@@ -403,6 +406,7 @@ main() {
             "mov [bx + di], cx\n"
             "mov [bp + si], cl\n"
             "mov [bp], ch\n"
+
             "mov ax, [bx + di - 37]\n"
             "mov [si - 300], cx\n"
             "mov dx, [bx - 32]\n"
