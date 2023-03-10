@@ -57,6 +57,31 @@ decode(Arena* arena, prb_Bytes input) {
         bool isImmToRmArithmetic = (byte1 & 0b11111100) == 0b10000000;
         bool isImmToAxMov = (byte1 & 0b11111110) == 0b10100000;
         bool isImmToAxArithmetic = (byte1 & 0b11000110) == 0b00000100;
+
+        char* jmpStr = "";
+        switch (byte1) {
+            case 0b01110100: jmpStr = "je"; break;
+            case 0b01111100: jmpStr = "jl"; break;
+            case 0b01111110: jmpStr = "jle"; break;
+            case 0b01110010: jmpStr = "jb"; break;
+            case 0b01110110: jmpStr = "jbe"; break;
+            case 0b01111010: jmpStr = "jp"; break;
+            case 0b01110000: jmpStr = "jo"; break;
+            case 0b01111000: jmpStr = "js"; break;
+            case 0b01110101: jmpStr = "jnz"; break;
+            case 0b01111101: jmpStr = "jnl"; break;
+            case 0b01111111: jmpStr = "jnle"; break;
+            case 0b01110011: jmpStr = "jnb"; break;
+            case 0b01110111: jmpStr = "jnbe"; break;
+            case 0b01111011: jmpStr = "jnp"; break;
+            case 0b01110001: jmpStr = "jno"; break;
+            case 0b01111001: jmpStr = "jns"; break;
+            case 0b11100010: jmpStr = "loop"; break;
+            case 0b11100001: jmpStr = "loopz"; break;
+            case 0b11100000: jmpStr = "loopnz"; break;
+            case 0b11100011: jmpStr = "jcxz"; break;
+        }
+
         if (isRegRegMov || isRegRegArithmetic) {
             bool dbit = (byte1 & 0b10) != 0;
             bool wbit = (byte1 & 0b1) != 0;
@@ -310,7 +335,7 @@ decode(Arena* arena, prb_Bytes input) {
                     default: assert(!"unimplemented");
                 }
                 i16 value = address;
-                if (!wbit) {
+                if (!wbit & (byte2 & 0b10000000)) {
                     value = 0b1111111100000000 | (u16)byte2;
                 }
                 prb_addStrSegment(&gstr, "%s, %d\n", regName, value);
@@ -336,6 +361,14 @@ decode(Arena* arena, prb_Bytes input) {
             if (wbit) {
                 offset += 1;
             }
+        } else if (jmpStr[0] != '\0') {
+            u8 byte2 = input.data[offset + 1];
+            i16 jumpOffset = byte2;
+            if (byte2 & 0b10000000) {
+                jumpOffset = 0b1111111100000000 | jumpOffset;
+            }
+            prb_addStrSegment(&gstr, "%s $+2+%d\n", jmpStr, jumpOffset);
+            offset += 2;
         } else {
             assert(!"unimplemented");
         }
@@ -493,6 +526,35 @@ main() {
             "cmp ax, 1000\n"
             "cmp al, -30\n"
             "cmp al, 9\n"
+
+            "test_label0:\n"
+            "jnz test_label1\n"
+            "jnz test_label0\n"
+            "test_label1:\n"
+            "jnz test_label0\n"
+            "jnz test_label1\n"
+
+            "label:\n"
+            "je label\n"
+            "jl label\n"
+            "jle label\n"
+            "jb label\n"
+            "jbe label\n"
+            "jp label\n"
+            "jo label\n"
+            "js label\n"
+            "jne label\n"
+            "jnl label\n"
+            "jg label\n"
+            "jnb label\n"
+            "ja label\n"
+            "jnp label\n"
+            "jno label\n"
+            "jns label\n"
+            "loop label\n"
+            "loopz label\n"
+            "loopnz label\n"
+            "jcxz label\n"
         )
     );
 
