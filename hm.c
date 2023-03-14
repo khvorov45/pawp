@@ -408,6 +408,8 @@ main() {
 
     test_decode(
         arena,
+        // NOTE(khvorov) This random asm is compiled from the various listings here
+        // https://github.com/cmuratori/computer_enhance
         STR(
             "bits 16\n"
 
