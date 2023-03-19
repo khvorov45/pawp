@@ -157,23 +157,103 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
         Instr instr = instrs[0];
         for (i32 byteInd = 0; byteInd < arrlen(instr.bytes); byteInd++) {
             ByteDesc byte = instr.bytes[byteInd];
-            i32      bitsLeft = 8;
-            for (i32 bitInd = 0; bitInd < arrlen(byte.bits); bitInd++) {
-                BitDesc bit = byte.bits[bitInd];
+
+            if (arrlen(byte.bits) > 1) {
+                assert(byteInd == 0 || byteInd == 1);
+
+                i32 bitsLeft = 8;
+                for (i32 bitInd = 0; bitInd < arrlen(byte.bits); bitInd++) {
+                    BitDesc bit = byte.bits[bitInd];
+
+                    addIndent(gstr, indentLevel);
+                    switch (bit.kind) {
+                        case BitDescKind_Literal: {
+                            prb_addStrSegment(gstr, "u8 byte%dbit%d_literal = ", byteInd, bitInd);
+                        } break;
+                        case BitDescKind_Named: {
+                            prb_addStrSegment(gstr, "u8 %.*s = ", LIT(bit.name));
+                        } break;
+                    }
+
+                    u8 mask = ((1 << bit.bitCount) - 1);
+                    prb_addStrSegment(gstr, "(input.data[offset] >> %d) & 0b", bitsLeft - bit.bitCount);
+                    addBinary(gstr, mask, 8);
+                    prb_addStrSegment(gstr, ";\n");
+
+                    bitsLeft -= bit.bitCount;
+                }
+
                 addIndent(gstr, indentLevel);
-                u8 mask = ((1 << bit.bitCount) - 1);
-                prb_addStrSegment(gstr, "u8 byte%dbit%d = (byte%d >> %d) & 0b", byteInd, bitInd, byteInd, bitsLeft - bit.bitCount);
-                addBinary(gstr, mask, 8);
-                prb_addStrSegment(gstr, ";\n");
-                // switch (bit.kind) {
-                //     case BitDescKind_Literal: {
-                //         addIndent(gstr, indentLevel);
-                //         prb_addStrSegment(gstr);
-                //     } break;
-                //     case BitDescKind_Named: {
-                //     } break;
-                // }
-                bitsLeft -= bit.bitCount;
+                prb_addStrSegment(gstr, "offset += 1;\n\n");
+            } else {
+                assert(arrlen(byte.bits) == 1);
+                BitDesc bit = byte.bits[0];
+                assert(bit.kind == BitDescKind_Named);
+                if (prb_streq(bit.name, STR("disp_lo"))) {
+                    addIndent(gstr, indentLevel);
+                    prb_addStrSegment(gstr, "switch (mod) {\n");
+
+                    addIndent(gstr, indentLevel + 1);
+                    prb_addStrSegment(gstr, "case 0b00: {\n");
+                    addIndent(gstr, indentLevel + 2);
+                    prb_addStrSegment(gstr, "if (r_m == 0b110) {\n");
+                    addIndent(gstr, indentLevel + 3);
+                    prb_addStrSegment(gstr, "u16 disp = (((u16)input.data[offset + 1]) << 8) | ((u16)input.data[offset]);\n");
+                    addIndent(gstr, indentLevel + 3);
+                    prb_addStrSegment(gstr, "offset += 2;\n");
+                    addIndent(gstr, indentLevel + 2);
+                    prb_addStrSegment(gstr, "}\n");
+                    addIndent(gstr, indentLevel + 1);
+                    prb_addStrSegment(gstr, "} break;\n");
+
+                    addIndent(gstr, indentLevel + 1);
+                    prb_addStrSegment(gstr, "case 0b01: {\n");
+                    addIndent(gstr, indentLevel + 2);
+                    prb_addStrSegment(gstr, "i16 disp = *((i8*)&input.data[offset]);\n");
+                    addIndent(gstr, indentLevel + 2);
+                    prb_addStrSegment(gstr, "offset += 1;\n");
+                    addIndent(gstr, indentLevel + 1);
+                    prb_addStrSegment(gstr, "} break;\n");
+
+                    addIndent(gstr, indentLevel + 1);
+                    prb_addStrSegment(gstr, "case 0b10: {\n");
+                    addIndent(gstr, indentLevel + 2);
+                    prb_addStrSegment(gstr, "u16 disp = (((u16)input.data[offset + 1]) << 8) | ((u16)input.data[offset]);\n");
+                    addIndent(gstr, indentLevel + 2);
+                    prb_addStrSegment(gstr, "offset += 2;\n");
+                    addIndent(gstr, indentLevel + 1);
+                    prb_addStrSegment(gstr, "} break;\n");
+
+                    addIndent(gstr, indentLevel + 1);
+                    prb_addStrSegment(gstr, "case 0b11: break;\n");
+
+                    addIndent(gstr, indentLevel);
+                    prb_addStrSegment(gstr, "}\n\n");
+                } else if (prb_streq(bit.name, STR("data_lo"))) {
+                    addIndent(gstr, indentLevel);
+                    prb_addStrSegment(gstr, "u16 data = input.data[offset];\n");
+                    addIndent(gstr, indentLevel);
+                    prb_addStrSegment(gstr, "offset += 1;\n");
+                    addIndent(gstr, indentLevel);
+                    prb_addStrSegment(gstr, "if (w == 1) {\n");
+                    addIndent(gstr, indentLevel + 1);
+                    prb_addStrSegment(gstr, "data = ((u16)input.data[offset] << 8) | data;\n");
+                    addIndent(gstr, indentLevel + 1);
+                    prb_addStrSegment(gstr, "offset += 1;\n");
+                    addIndent(gstr, indentLevel);
+                    prb_addStrSegment(gstr, "}\n");
+                } else {
+                    assert(!"unrecognized");
+                }
+
+                if (prb_strEndsWith(bit.name, STR("_lo"))) {
+                    assert(byteInd < arrlen(instr.bytes) - 1);
+                    ByteDesc nextByte = instr.bytes[byteInd + 1];
+                    assert(arrlen(nextByte.bits) == 1);
+                    BitDesc nextByteBit = nextByte.bits[0];
+                    assert(nextByteBit.kind == BitDescKind_Named && prb_strEndsWith(nextByteBit.name, STR("_hi")));
+                    byteInd += 1;
+                }
             }
         }
     }
@@ -331,11 +411,20 @@ main() {
         assert(prb_writeEntireFile(arena, x86InstructionPath, str.ptr, str.len));
     }
 
+    // NOTE(khvorov) Insert codegen into the main file
     {
-        prb_GrowingStr gstr = prb_beginStr(arena);
-        codegen(&gstr, instrs, 1);
-        Str str = prb_endStr(&gstr);
-        prb_writeToStdout(str);
+        Str hmpath = prb_pathJoin(arena, rootDir, STR("hm.c"));
+        Str hmcontent = readFileStr(arena, hmpath);
+        prb_GrowingStr hmnew = prb_beginStr(arena);
+
+        StrScanner hmscan = createStrScanner(hmcontent);
+        assert(scanForward(&hmscan, STR("// @codegen")));
+        prb_addStrSegment(&hmnew, "%.*s%.*s\n", LIT(hmscan.betweenLastMatches), LIT(hmscan.match));
+        codegen(&hmnew, instrs, 2);
+        assert(scanForward(&hmscan, STR("// @end")));
+        prb_addStrSegment(&hmnew, "        %.*s%.*s", LIT(hmscan.match), LIT(hmscan.afterMatch));
+        Str hmnewContent = prb_endStr(&hmnew);
+        prb_writeToStdout(hmnewContent);
     }
 
     return 0;
