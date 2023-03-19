@@ -9,8 +9,10 @@ typedef prb_Arena Arena;
 typedef prb_Str   Str;
 typedef intptr_t  isize;
 typedef uint8_t   u8;
+typedef int8_t    i8;
 typedef uint16_t  u16;
 typedef int16_t   i16;
+typedef int32_t   i32;
 
 function void
 execCmd(Arena* arena, Str cmd) {
@@ -42,35 +44,170 @@ getRegStr(u8 reg, bool wbit) {
     return result;
 }
 
+typedef enum InstrKind {
+    InstrKind_mov_RegisterMemory_ToFrom_Register,
+    InstrKind_mov_Immediate_To_RegisterMemory,
+} InstrKind;
+
+typedef enum RegisterID {
+    RegisterID_AX,
+    RegisterID_CX,
+    RegisterID_DX,
+    RegisterID_BX,
+    RegisterID_SP,
+    RegisterID_BP,
+    RegisterID_SI,
+    RegisterID_DI,
+} RegisterID;
+
+typedef struct Operand {
+    bool reg;
+    union {
+        RegisterID regID;
+    };
+} Operand;
+
 typedef struct Instr {
     InstrKind kind;
     union {
-        union {
-            u16 u;
-            i16 i;
-        } disp;
-    };
+        u16 u;
+        i16 i;
+    } disp;
+    Operand op1;
+    Operand op2;
 } Instr;
 
 typedef struct InstrArray {
     Instr* ptr;
-    isize len;
+    isize  len;
 } InstrArray;
 
 function InstrArray
 decode(Arena* arena, prb_Bytes input) {
-    Instr* result = prb_arenaAllocStruct(arena, Instr);
+    // NOTE(khvorov) This arena won't be allocating anything other than instructions here
+    prb_arenaAlignFreePtr(arena, alignof(Instr));
+    Instr* instrs = prb_arenaFreePtr(arena);
 
+    i32 instrCount = 0;
     i32 offset = 0;
     while (offset < input.len) {
+        Instr* instr = prb_arenaAllocStruct(arena, Instr);
+        instrCount += 1;
 
+        // clang-format off
         // @codegen
+        u8 first6Bits = input.data[offset] >> 2;
+        switch (first6Bits) {
+
+            // mov(RegisterMemory_ToFrom_Register)
+            case 0b100010: {
+                instr->kind = InstrKind_mov_RegisterMemory_ToFrom_Register;
+
+                u8 byte0bit0_literal = (input.data[offset] >> 2) & 0b00111111;
+                u8 d = (input.data[offset] >> 1) & 0b00000001;
+                u8 w = (input.data[offset] >> 0) & 0b00000001;
+                offset += 1;
+
+                u8 mod = (input.data[offset] >> 6) & 0b00000011;
+                u8 reg = (input.data[offset] >> 3) & 0b00000111;
+                u8 r_m = (input.data[offset] >> 0) & 0b00000111;
+                offset += 1;
+
+                switch (mod) {
+                    case 0b00: {
+                        if (r_m == 0b110) {
+                            instr->disp.u = (((u16)input.data[offset + 1]) << 8) | ((u16)input.data[offset]);
+                            offset += 2;
+                        }
+                    } break;
+                    case 0b01: {
+                        instr->disp.i = *((i8*)&input.data[offset]);
+                        offset += 1;
+                    } break;
+                    case 0b10: {
+                        instr->disp.u = (((u16)input.data[offset + 1]) << 8) | ((u16)input.data[offset]);
+                        offset += 2;
+                    } break;
+                    case 0b11: break;
+                }
+
+                instr->op1.reg = true;
+                instr->op1.regID = reg;
+
+                instr->op2.reg = true;
+                instr->op2.regID = r_m;
+
+                if (!d) {
+                    Operand temp = instr->op1;
+                    instr->op1 = instr->op2;
+                    instr->op2 = temp;
+                }
+            } break;
+
+            // mov(Immediate_To_RegisterMemory)
+            case 0b110001: {
+                instr->kind = InstrKind_mov_Immediate_To_RegisterMemory;
+
+                u8 byte0bit0_literal = (input.data[offset] >> 1) & 0b01111111;
+                u8 w = (input.data[offset] >> 0) & 0b00000001;
+                offset += 1;
+
+                u8 mod = (input.data[offset] >> 6) & 0b00000011;
+                u8 byte1bit1_literal = (input.data[offset] >> 3) & 0b00000111;
+                u8 r_m = (input.data[offset] >> 0) & 0b00000111;
+                offset += 1;
+
+                switch (mod) {
+                    case 0b00: {
+                        if (r_m == 0b110) {
+                            instr->disp.u = (((u16)input.data[offset + 1]) << 8) | ((u16)input.data[offset]);
+                            offset += 2;
+                        }
+                    } break;
+                    case 0b01: {
+                        instr->disp.i = *((i8*)&input.data[offset]);
+                        offset += 1;
+                    } break;
+                    case 0b10: {
+                        instr->disp.u = (((u16)input.data[offset + 1]) << 8) | ((u16)input.data[offset]);
+                        offset += 2;
+                    } break;
+                    case 0b11: break;
+                }
+
+                u16 data = input.data[offset];
+                offset += 1;
+                if (w == 1) {
+                    data = ((u16)input.data[offset] << 8) | data;
+                    offset += 1;
+                }
+
+                instr->op1.reg = true;
+                instr->op1.regID = r_m;
+
+            } break;
+        }
         // @end
+        // clang-format on
 
         assert(offset <= input.len);
     }
 
+    InstrArray result = {instrs, instrCount};
     return result;
+}
+
+function void
+addOpStr(prb_GrowingStr* gstr, Operand op) {
+    if (op.reg) {
+        char* regTable16[] = {"ax", "cx", "dx", "bx", "sp", "bp", "si", "di"};
+        char* regTable8[] = {"al", "cl", "dl", "bl", "ah", "ch", "dh", "bh"};
+        assert(prb_arrayCount(regTable8) == prb_arrayCount(regTable16));
+        assert(op.regID < prb_arrayCount(regTable8));
+        prb_addStrSegment(gstr, "%s", regTable16[op.regID]);
+    } else {
+        assert(!"unimplemented");
+    }
 }
 
 function void
@@ -85,9 +222,27 @@ test_decode(Arena* arena, Str input) {
     execCmd(arena, prb_fmt(arena, "nasm %.*s -o %.*s", LIT(inputAsm), LIT(inputBin)));
     prb_Bytes ref = readFile(arena, inputBin);
 
-    prb_Str decoded = decode(arena, ref);
+    InstrArray decodedArray = decode(arena, ref);
 
-    assert(prb_writeEntireFile(arena, decodeAsm, decoded.ptr, decoded.len));
+    prb_GrowingStr reincode = prb_beginStr(arena);
+    prb_addStrSegment(&reincode, "bits 16\n");
+    for (i32 instrInd = 0; instrInd < decodedArray.len; instrInd++) {
+        Instr instr = decodedArray.ptr[instrInd];
+        switch (instr.kind) {
+            case InstrKind_mov_RegisterMemory_ToFrom_Register: {
+                prb_addStrSegment(&reincode, "mov ");
+                addOpStr(&reincode, instr.op1);
+                prb_addStrSegment(&reincode, ", ");
+                addOpStr(&reincode, instr.op2);
+                prb_addStrSegment(&reincode, "\n");
+            } break;
+            case InstrKind_mov_Immediate_To_RegisterMemory: {
+            } break;
+        }
+    }
+    Str reincodeAsm = prb_endStr(&reincode);
+
+    assert(prb_writeEntireFile(arena, decodeAsm, reincodeAsm.ptr, reincodeAsm.len));
     execCmd(arena, prb_fmt(arena, "nasm %.*s -o %.*s", LIT(decodeAsm), LIT(decodeBin)));
     prb_Bytes mine = readFile(arena, decodeBin);
     assert(ref.len == mine.len);

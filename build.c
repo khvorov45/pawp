@@ -16,11 +16,11 @@ typedef uint16_t       u16;
 typedef int16_t        i16;
 typedef int32_t        i32;
 
-// function void
-// execCmd(Arena* arena, Str cmd) {
-//     prb_Process proc = prb_createProcess(cmd, (prb_ProcessSpec) {});
-//     assert(prb_launchProcesses(arena, &proc, 1, prb_Background_No));
-// }
+function void
+execCmd(Arena* arena, Str cmd) {
+    prb_Process proc = prb_createProcess(cmd, (prb_ProcessSpec) {});
+    assert(prb_launchProcesses(arena, &proc, 1, prb_Background_No));
+}
 
 function prb_Bytes
 readFile(Arena* arena, Str path) {
@@ -115,7 +115,7 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
         }
 
         addIndent(gstr, indentLevel);
-        prb_addStrSegment(gstr, "u8 first%dBits = byte1 >> %d;\n", minBitsInFirstLiteral, 8 - minBitsInFirstLiteral);
+        prb_addStrSegment(gstr, "u8 first%dBits = input.data[offset] >> %d;\n", minBitsInFirstLiteral, 8 - minBitsInFirstLiteral);
         addIndent(gstr, indentLevel);
         prb_addStrSegment(gstr, "switch (first%dBits) {\n", minBitsInFirstLiteral);
 
@@ -155,6 +155,12 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
         prb_addStrSegment(gstr, "}\n");
     } else {
         Instr instr = instrs[0];
+        addIndent(gstr, indentLevel);
+        prb_addStrSegment(gstr, "instr->kind = InstrKind_%.*s_%.*s;\n\n", LIT(instr.name), LIT(instr.desc));
+        bool regField = false;
+        bool rmField = false;
+        bool dField = false;
+
         for (i32 byteInd = 0; byteInd < arrlen(instr.bytes); byteInd++) {
             ByteDesc byte = instr.bytes[byteInd];
 
@@ -172,6 +178,9 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
                         } break;
                         case BitDescKind_Named: {
                             prb_addStrSegment(gstr, "u8 %.*s = ", LIT(bit.name));
+                            regField = regField || prb_streq(bit.name, STR("reg"));
+                            rmField = rmField || prb_streq(bit.name, STR("r_m"));
+                            dField = dField || prb_streq(bit.name, STR("d"));
                         } break;
                     }
 
@@ -198,7 +207,7 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
                     addIndent(gstr, indentLevel + 2);
                     prb_addStrSegment(gstr, "if (r_m == 0b110) {\n");
                     addIndent(gstr, indentLevel + 3);
-                    prb_addStrSegment(gstr, "u16 disp = (((u16)input.data[offset + 1]) << 8) | ((u16)input.data[offset]);\n");
+                    prb_addStrSegment(gstr, "instr->disp.u = (((u16)input.data[offset + 1]) << 8) | ((u16)input.data[offset]);\n");
                     addIndent(gstr, indentLevel + 3);
                     prb_addStrSegment(gstr, "offset += 2;\n");
                     addIndent(gstr, indentLevel + 2);
@@ -209,7 +218,7 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
                     addIndent(gstr, indentLevel + 1);
                     prb_addStrSegment(gstr, "case 0b01: {\n");
                     addIndent(gstr, indentLevel + 2);
-                    prb_addStrSegment(gstr, "i16 disp = *((i8*)&input.data[offset]);\n");
+                    prb_addStrSegment(gstr, "instr->disp.i = *((i8*)&input.data[offset]);\n");
                     addIndent(gstr, indentLevel + 2);
                     prb_addStrSegment(gstr, "offset += 1;\n");
                     addIndent(gstr, indentLevel + 1);
@@ -218,7 +227,7 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
                     addIndent(gstr, indentLevel + 1);
                     prb_addStrSegment(gstr, "case 0b10: {\n");
                     addIndent(gstr, indentLevel + 2);
-                    prb_addStrSegment(gstr, "u16 disp = (((u16)input.data[offset + 1]) << 8) | ((u16)input.data[offset]);\n");
+                    prb_addStrSegment(gstr, "instr->disp.u = (((u16)input.data[offset + 1]) << 8) | ((u16)input.data[offset]);\n");
                     addIndent(gstr, indentLevel + 2);
                     prb_addStrSegment(gstr, "offset += 2;\n");
                     addIndent(gstr, indentLevel + 1);
@@ -241,7 +250,7 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
                     addIndent(gstr, indentLevel + 1);
                     prb_addStrSegment(gstr, "offset += 1;\n");
                     addIndent(gstr, indentLevel);
-                    prb_addStrSegment(gstr, "}\n");
+                    prb_addStrSegment(gstr, "}\n\n");
                 } else {
                     assert(!"unrecognized");
                 }
@@ -255,6 +264,39 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
                     byteInd += 1;
                 }
             }
+        }
+
+        if (regField) {            
+            addIndent(gstr, indentLevel);
+            prb_addStrSegment(gstr, "instr->op1.reg = true;\n");
+            addIndent(gstr, indentLevel);
+            prb_addStrSegment(gstr, "instr->op1.regID = reg;\n\n");
+        }
+
+        if (rmField) {
+            i32 opIndex = 1;
+            if (regField) {
+                opIndex = 2;
+            }
+            addIndent(gstr, indentLevel);
+            prb_addStrSegment(gstr, "instr->op%d.reg = true;\n", opIndex);
+            addIndent(gstr, indentLevel);
+            prb_addStrSegment(gstr, "instr->op%d.regID = r_m;\n\n", opIndex);
+        }
+
+        if (dField) {
+            addIndent(gstr, indentLevel);
+            prb_addStrSegment(gstr, "if (!d) {\n");
+
+            addIndent(gstr, indentLevel + 1);
+            prb_addStrSegment(gstr, "Operand temp = instr->op1;\n");
+            addIndent(gstr, indentLevel + 1);
+            prb_addStrSegment(gstr, "instr->op1 = instr->op2;\n");
+            addIndent(gstr, indentLevel + 1);
+            prb_addStrSegment(gstr, "instr->op2 = temp;\n");
+
+            addIndent(gstr, indentLevel);
+            prb_addStrSegment(gstr, "}\n");
         }
     }
 }
@@ -412,19 +454,37 @@ main() {
     }
 
     // NOTE(khvorov) Insert codegen into the main file
+    Str hmpath = prb_pathJoin(arena, rootDir, STR("hm.c"));
     {
-        Str hmpath = prb_pathJoin(arena, rootDir, STR("hm.c"));
-        Str hmcontent = readFileStr(arena, hmpath);
+        Str            hmcontent = readFileStr(arena, hmpath);
         prb_GrowingStr hmnew = prb_beginStr(arena);
 
         StrScanner hmscan = createStrScanner(hmcontent);
+
+        assert(scanForward(&hmscan, STR("typedef enum InstrKind {")));
+        prb_addStrSegment(&hmnew, "%.*s%.*s\n", LIT(hmscan.betweenLastMatches), LIT(hmscan.match));
+        for (i32 instrInd = 0; instrInd < arrlen(instrs); instrInd++) {
+            Instr instr = instrs[instrInd];
+            prb_addStrSegment(&hmnew, "    InstrKind_%.*s_%.*s,\n", LIT(instr.name), LIT(instr.desc));
+        }
+        assert(scanForward(&hmscan, STR("} InstrKind;")));
+        prb_addStrSegment(&hmnew, "%.*s", LIT(hmscan.match));
+
         assert(scanForward(&hmscan, STR("// @codegen")));
         prb_addStrSegment(&hmnew, "%.*s%.*s\n", LIT(hmscan.betweenLastMatches), LIT(hmscan.match));
         codegen(&hmnew, instrs, 2);
         assert(scanForward(&hmscan, STR("// @end")));
         prb_addStrSegment(&hmnew, "        %.*s%.*s", LIT(hmscan.match), LIT(hmscan.afterMatch));
+
         Str hmnewContent = prb_endStr(&hmnew);
-        prb_writeToStdout(hmnewContent);
+        assert(prb_writeEntireFile(arena, hmpath, hmnewContent.ptr, hmnewContent.len));
+    }
+
+    // NOTE(khvorov) Compile and run the main file
+    {
+        Str hmout = prb_replaceExt(arena, hmpath, STR("exe"));
+        execCmd(arena, prb_fmt(arena, "clang -g -Og -Wall -Wextra %.*s -o %.*s", LIT(hmpath), LIT(hmout)));
+        execCmd(arena, hmout);
     }
 
     return 0;

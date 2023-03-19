@@ -1,2 +1,2 @@
-mov(Register/memory to/from register) | 100010 d(1) w(1) | mod(2) reg(3) r_m(3) | disp_lo | disp_hi
-mov(Immediate to register/memory)     | 1100011 w(1) | mod(2) 000 r_m(3) | disp_lo | disp_hi | data_lo | data_hi
+mov(RegisterMemory_ToFrom_Register) | 100010 d(1) w(1) | mod(2) reg(3) r_m(3) | disp_lo | disp_hi
+mov(Immediate_To_RegisterMemory)    | 1100011 w(1) | mod(2) 000 r_m(3) | disp_lo | disp_hi | data_lo | data_hi
