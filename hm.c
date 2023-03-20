@@ -60,10 +60,18 @@ typedef enum RegisterID {
     RegisterID_DI,
 } RegisterID;
 
+typedef enum OpID {
+    OpID_Register,
+} OpID;
+
 typedef struct Operand {
-    bool reg;
+    OpID kind;
     union {
-        RegisterID regID;
+        struct {
+            RegisterID id;
+            u8         bytes;
+            u8         offset;
+        } reg;
     };
 } Operand;
 
@@ -131,12 +139,15 @@ decode(Arena* arena, prb_Bytes input) {
                     case 0b11: break;
                 }
 
-                instr->op1.reg = true;
-                instr->op1.regID = reg;
+                i32 regBytes = w ? 2 : 1;
 
-                instr->op2.reg = true;
-                instr->op2.regID = r_m;
+                instr->op1 = (Operand) {.kind = OpID_Register, .reg.id = reg, .reg.bytes = regBytes};
+                if (!w) {
+                    instr->op1.reg.offset = reg > 0b11;
+                    instr->op1.reg.id = reg % 4;
+                }
 
+                instr->op2 = (Operand) {.kind = OpID_Register, .reg.id = r_m, .reg.bytes = regBytes};
                 if (!d) {
                     Operand temp = instr->op1;
                     instr->op1 = instr->op2;
@@ -182,9 +193,9 @@ decode(Arena* arena, prb_Bytes input) {
                     offset += 1;
                 }
 
-                instr->op1.reg = true;
-                instr->op1.regID = r_m;
+                i32 regBytes = w ? 2 : 1;
 
+                instr->op1 = (Operand) {.kind = OpID_Register, .reg.id = r_m, .reg.bytes = regBytes};
             } break;
         }
         // @end
@@ -199,14 +210,23 @@ decode(Arena* arena, prb_Bytes input) {
 
 function void
 addOpStr(prb_GrowingStr* gstr, Operand op) {
-    if (op.reg) {
-        char* regTable16[] = {"ax", "cx", "dx", "bx", "sp", "bp", "si", "di"};
-        char* regTable8[] = {"al", "cl", "dl", "bl", "ah", "ch", "dh", "bh"};
-        assert(prb_arrayCount(regTable8) == prb_arrayCount(regTable16));
-        assert(op.regID < prb_arrayCount(regTable8));
-        prb_addStrSegment(gstr, "%s", regTable16[op.regID]);
-    } else {
-        assert(!"unimplemented");
+    switch (op.kind) {
+        case OpID_Register: {
+            char* regTable16[] = {"ax", "cx", "dx", "bx", "sp", "bp", "si", "di"};
+            char* regTable8[] = {"al", "cl", "dl", "bl", "ah", "ch", "dh", "bh"};
+            assert(prb_arrayCount(regTable8) == prb_arrayCount(regTable16));
+            char** regTable = regTable16;
+            if (op.reg.bytes == 1) {
+                regTable = regTable8;
+            }
+            i32 index = op.reg.id;
+            if (op.reg.offset == 1) {
+                assert(op.reg.bytes == 1);
+                index += 4;
+            }
+            assert(index < prb_arrayCount(regTable8));
+            prb_addStrSegment(gstr, "%s", regTable[index]);
+        } break;
     }
 }
 
@@ -262,19 +282,19 @@ main() {
             "bits 16\n"
 
             "mov cx, bx\n"
-            // "mov ch, ah\n"
-            // "mov dx, bx\n"
-            // "mov si, bx\n"
-            // "mov bx, di\n"
-            // "mov al, cl\n"
-            // "mov ch, ch\n"
-            // "mov bx, ax\n"
-            // "mov bx, si\n"
-            // "mov sp, di\n"
-            // "mov bp, ax\n"
+            "mov ch, ah\n"
+            "mov dx, bx\n"
+            "mov si, bx\n"
+            "mov bx, di\n"
+            "mov al, cl\n"
+            "mov ch, ch\n"
+            "mov bx, ax\n"
+            "mov bx, si\n"
+            "mov sp, di\n"
+            "mov bp, ax\n"
 
-            // "mov si, bx\n"
-            // "mov dh, al\n"
+            "mov si, bx\n"
+            "mov dh, al\n"
             // "mov cl, 12\n"
             // "mov ch, -12\n"
             // "mov cx, 12\n"

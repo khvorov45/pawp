@@ -160,6 +160,7 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
         bool regField = false;
         bool rmField = false;
         bool dField = false;
+        bool wField = false;
 
         for (i32 byteInd = 0; byteInd < arrlen(instr.bytes); byteInd++) {
             ByteDesc byte = instr.bytes[byteInd];
@@ -181,6 +182,7 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
                             regField = regField || prb_streq(bit.name, STR("reg"));
                             rmField = rmField || prb_streq(bit.name, STR("r_m"));
                             dField = dField || prb_streq(bit.name, STR("d"));
+                            wField = wField || prb_streq(bit.name, STR("w"));
                         } break;
                     }
 
@@ -266,11 +268,24 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
             }
         }
 
-        if (regField) {            
+        if (wField) {
             addIndent(gstr, indentLevel);
-            prb_addStrSegment(gstr, "instr->op1.reg = true;\n");
+            prb_addStrSegment(gstr, "i32 regBytes = w ? 2 : 1;\n\n");
+        }        
+
+        if (regField) {
             addIndent(gstr, indentLevel);
-            prb_addStrSegment(gstr, "instr->op1.regID = reg;\n\n");
+            prb_addStrSegment(gstr, "instr->op1 = (Operand) {.kind = OpID_Register, .reg.id = reg, .reg.bytes = regBytes};\n");
+            addIndent(gstr, indentLevel);
+            prb_addStrSegment(gstr, "if (!w) {\n");
+            addIndent(gstr, indentLevel + 1);
+            prb_addStrSegment(gstr, "instr->op1.reg.offset = reg > 0b11;\n");
+            addIndent(gstr, indentLevel + 1);
+            prb_addStrSegment(gstr, "instr->op1.reg.id = reg %% 4;\n");
+            addIndent(gstr, indentLevel);
+            prb_addStrSegment(gstr, "}\n");
+
+            prb_addStrSegment(gstr, "\n");
         }
 
         if (rmField) {
@@ -279,9 +294,7 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
                 opIndex = 2;
             }
             addIndent(gstr, indentLevel);
-            prb_addStrSegment(gstr, "instr->op%d.reg = true;\n", opIndex);
-            addIndent(gstr, indentLevel);
-            prb_addStrSegment(gstr, "instr->op%d.regID = r_m;\n\n", opIndex);
+            prb_addStrSegment(gstr, "instr->op%d = (Operand) {.kind = OpID_Register, .reg.id = r_m, .reg.bytes = regBytes};\n", opIndex);
         }
 
         if (dField) {
