@@ -28,25 +28,10 @@ readFile(Arena* arena, Str path) {
     return result;
 }
 
-function char*
-getRegStr(u8 reg, bool wbit) {
-    char* regTable16[] = {"ax", "cx", "dx", "bx", "sp", "bp", "si", "di"};
-    char* regTable8[] = {"al", "cl", "dl", "bl", "ah", "ch", "dh", "bh"};
-    assert(prb_arrayCount(regTable8) == prb_arrayCount(regTable16));
-    assert(reg < prb_arrayCount(regTable16));
-
-    char** regTable = regTable16;
-    if (!wbit) {
-        regTable = regTable8;
-    }
-
-    char* result = regTable[reg];
-    return result;
-}
-
 typedef enum InstrKind {
     InstrKind_mov_RegisterMemory_ToFrom_Register,
     InstrKind_mov_Immediate_To_RegisterMemory,
+    InstrKind_mov_Immediate_To_Register,
 } InstrKind;
 
 typedef enum RegisterID {
@@ -62,7 +47,13 @@ typedef enum RegisterID {
 
 typedef enum OpID {
     OpID_Register,
+    OpID_Immediate,
 } OpID;
+
+typedef union ui16 {
+    u16 u;
+    i16 i;
+} ui16;
 
 typedef struct Operand {
     OpID kind;
@@ -72,17 +63,15 @@ typedef struct Operand {
             u8         bytes;
             u8         offset;
         } reg;
+        u16 immediate;
     };
 } Operand;
 
 typedef struct Instr {
     InstrKind kind;
-    union {
-        u16 u;
-        i16 i;
-    } disp;
-    Operand op1;
-    Operand op2;
+    ui16      disp;
+    Operand   op1;
+    Operand   op2;
 } Instr;
 
 typedef struct InstrArray {
@@ -104,14 +93,15 @@ decode(Arena* arena, prb_Bytes input) {
 
         // clang-format off
         // @codegen
-        u8 first6Bits = input.data[offset] >> 2;
-        switch (first6Bits) {
+        u8 first4Bits = input.data[offset] >> 4;
+        switch (first4Bits) {
 
             // mov(RegisterMemory_ToFrom_Register)
-            case 0b100010: {
+            case 0b1000: {
                 instr->kind = InstrKind_mov_RegisterMemory_ToFrom_Register;
 
                 u8 byte0bit0_literal = (input.data[offset] >> 2) & 0b00111111;
+                assert(byte0bit0_literal == 0b100010);
                 u8 d = (input.data[offset] >> 1) & 0b00000001;
                 u8 w = (input.data[offset] >> 0) & 0b00000001;
                 offset += 1;
@@ -153,16 +143,41 @@ decode(Arena* arena, prb_Bytes input) {
                 }
             } break;
 
+            // mov(Immediate_To_Register)
+            case 0b1011: {
+                instr->kind = InstrKind_mov_Immediate_To_Register;
+
+                u8 byte0bit0_literal = (input.data[offset] >> 4) & 0b00001111;
+                assert(byte0bit0_literal == 0b1011);
+                u8 w = (input.data[offset] >> 3) & 0b00000001;
+                u8 reg = (input.data[offset] >> 0) & 0b00000111;
+                offset += 1;
+
+                u16 data = input.data[offset];
+                offset += 1;
+                if (w == 1) {
+                    data = ((u16)input.data[offset] << 8) | data;
+                    offset += 1;
+                }
+
+                Operand regOp = {.kind = OpID_Register, .reg.id = w ? reg : reg % 4, .reg.bytes = w ? 2 : 1, .reg.offset = w == 0 && reg > 0b11};
+
+                instr->op1 = regOp;
+                instr->op2 = (Operand) {.kind = OpID_Immediate, .immediate = data};
+            } break;
+
             // mov(Immediate_To_RegisterMemory)
-            case 0b110001: {
+            case 0b1100: {
                 instr->kind = InstrKind_mov_Immediate_To_RegisterMemory;
 
                 u8 byte0bit0_literal = (input.data[offset] >> 1) & 0b01111111;
+                assert(byte0bit0_literal == 0b1100011);
                 u8 w = (input.data[offset] >> 0) & 0b00000001;
                 offset += 1;
 
                 u8 mod = (input.data[offset] >> 6) & 0b00000011;
                 u8 byte1bit1_literal = (input.data[offset] >> 3) & 0b00000111;
+                assert(byte1bit1_literal == 0b000);
                 u8 r_m = (input.data[offset] >> 0) & 0b00000111;
                 offset += 1;
 
@@ -194,7 +209,11 @@ decode(Arena* arena, prb_Bytes input) {
                     offset += 1;
                 }
 
+                instr->op1 = rmOp;
+                instr->op2 = (Operand) {.kind = OpID_Immediate, .immediate = data};
             } break;
+        
+            default: assert(!"unimplemented"); break;
         }
         // @end
         // clang-format on
@@ -225,6 +244,10 @@ addOpStr(prb_GrowingStr* gstr, Operand op) {
             assert(index < prb_arrayCount(regTable8));
             prb_addStrSegment(gstr, "%s", regTable[index]);
         } break;
+
+        case OpID_Immediate: {
+            prb_addStrSegment(gstr, "%d", op.immediate);
+        } break;
     }
 }
 
@@ -247,14 +270,17 @@ test_decode(Arena* arena, Str input) {
     for (i32 instrInd = 0; instrInd < decodedArray.len; instrInd++) {
         Instr instr = decodedArray.ptr[instrInd];
         switch (instr.kind) {
-            case InstrKind_mov_RegisterMemory_ToFrom_Register: {
+            case InstrKind_mov_RegisterMemory_ToFrom_Register:
+            case InstrKind_mov_Immediate_To_Register: {
                 prb_addStrSegment(&reincode, "mov ");
                 addOpStr(&reincode, instr.op1);
                 prb_addStrSegment(&reincode, ", ");
                 addOpStr(&reincode, instr.op2);
                 prb_addStrSegment(&reincode, "\n");
             } break;
+
             case InstrKind_mov_Immediate_To_RegisterMemory: {
+                assert(!"unimplemented");
             } break;
         }
     }
@@ -293,12 +319,12 @@ main() {
 
             "mov si, bx\n"
             "mov dh, al\n"
-            // "mov cl, 12\n"
-            // "mov ch, -12\n"
-            // "mov cx, 12\n"
-            // "mov cx, -12\n"
-            // "mov dx, 3948\n"
-            // "mov dx, -3948\n"
+            "mov cl, 12\n"
+            "mov ch, -12\n"
+            "mov cx, 12\n"
+            "mov cx, -12\n"
+            "mov dx, 3948\n"
+            "mov dx, -3948\n"
             // "mov al, [bx + si]\n"
             // "mov bx, [bp + di]\n"
             // "mov dx, [bp]\n"

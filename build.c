@@ -152,8 +152,7 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
                 prb_addStrSegment(gstr, "\n");
                 if (arrlen(caseInstrs) == 1) {
                     Instr instr = caseInstrs[0];
-                    addIndent(gstr, indentLevel + 1);
-                    prb_addStrSegment(gstr, "// %.*s(%.*s)\n", LIT(instr.name), LIT(instr.desc));
+                    addLine(gstr, indentLevel + 1, "// %.*s(%.*s)", LIT(instr.name), LIT(instr.desc));
                 }
                 addIndent(gstr, indentLevel + 1);
                 prb_addStrSegment(gstr, "case 0b");
@@ -165,8 +164,9 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
             }
         }
 
-        addIndent(gstr, indentLevel);
-        prb_addStrSegment(gstr, "}\n");
+        addLine(gstr, indentLevel, "");
+        addLine(gstr, indentLevel + 1, "default: assert(!\"unimplemented\"); break;");
+        addLine(gstr, indentLevel, "}");
     } else {
         Instr instr = instrs[0];
         addIndent(gstr, indentLevel);
@@ -175,6 +175,7 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
         bool rmField = false;
         bool dField = false;
         bool wField = false;
+        bool dataField = false;
 
         for (i32 byteInd = 0; byteInd < arrlen(instr.bytes); byteInd++) {
             ByteDesc byte = instr.bytes[byteInd];
@@ -204,6 +205,13 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
                     prb_addStrSegment(gstr, "(input.data[offset] >> %d) & 0b", bitsLeft - bit.bitCount);
                     addBinary(gstr, mask, 8);
                     prb_addStrSegment(gstr, ";\n");
+
+                    if (bit.kind == BitDescKind_Literal) {
+                        addIndent(gstr, indentLevel);
+                        prb_addStrSegment(gstr, "assert(byte%dbit%d_literal == 0b", byteInd, bitInd);
+                        addBinary(gstr, bit.literal, bit.bitCount);
+                        prb_addStrSegment(gstr, ");\n");
+                    }
 
                     bitsLeft -= bit.bitCount;
                 }
@@ -256,6 +264,7 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
                     addIndent(gstr, indentLevel);
                     prb_addStrSegment(gstr, "}\n\n");
                 } else if (prb_streq(bit.name, STR("data_lo"))) {
+                    dataField = true;
                     addIndent(gstr, indentLevel);
                     prb_addStrSegment(gstr, "u16 data = input.data[offset];\n");
                     addIndent(gstr, indentLevel);
@@ -295,6 +304,14 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
             addLine(gstr, indentLevel + 1, "instr->op1 = rmOp;");
             addLine(gstr, indentLevel + 1, "instr->op2 = regOp;");
             addLine(gstr, indentLevel, "}");
+        } else if (regField) {
+            addLine(gstr, indentLevel, "instr->op1 = regOp;");
+        } else if (rmField) {
+            addLine(gstr, indentLevel, "instr->op1 = rmOp;");
+        }
+
+        if (dataField) {
+            addLine(gstr, indentLevel, "instr->op2 = (Operand) {.kind = OpID_Immediate, .immediate = data};");
         }
     }
 }
