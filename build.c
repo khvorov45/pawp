@@ -226,43 +226,30 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
                     addLine(gstr, indentLevel, "Operand rmOp = {};");
                     addLine(gstr, indentLevel, "switch (mod) {");
 
-                    addIndent(gstr, indentLevel + 1);
-                    prb_addStrSegment(gstr, "case 0b00: {\n");
-                    addIndent(gstr, indentLevel + 2);
-                    prb_addStrSegment(gstr, "if (r_m == 0b110) {\n");
-                    addIndent(gstr, indentLevel + 3);
-                    prb_addStrSegment(gstr, "instr->disp.u = (((u16)input.data[offset + 1]) << 8) | ((u16)input.data[offset]);\n");
-                    addIndent(gstr, indentLevel + 3);
-                    prb_addStrSegment(gstr, "offset += 2;\n");
-                    addIndent(gstr, indentLevel + 2);
-                    prb_addStrSegment(gstr, "}\n");
-                    addIndent(gstr, indentLevel + 1);
-                    prb_addStrSegment(gstr, "} break;\n");
+                    addLine(gstr, indentLevel + 1, "case 0b00: {");
+                    addLine(gstr, indentLevel + 1 + 1, "rmOp = (Operand) {.kind = OpID_Memory, .mem.id = r_m};");
+                    addLine(gstr, indentLevel + 1 + 1, "if (r_m == 0b110) {");
+                    addLine(gstr, indentLevel + 1 + 1 + 1, "rmOp.mem.direct = true;");
+                    addLine(gstr, indentLevel + 1 + 1 + 1, "rmOp.mem.disp = (((u16)input.data[offset + 1]) << 8) | ((u16)input.data[offset]);");
+                    addLine(gstr, indentLevel + 1 + 1 + 1, "offset += 2;");
+                    addLine(gstr, indentLevel + 1 + 1, "}");
+                    addLine(gstr, indentLevel + 1, "} break;");
 
-                    addIndent(gstr, indentLevel + 1);
-                    prb_addStrSegment(gstr, "case 0b01: {\n");
-                    addIndent(gstr, indentLevel + 2);
-                    prb_addStrSegment(gstr, "instr->disp.i = *((i8*)&input.data[offset]);\n");
-                    addIndent(gstr, indentLevel + 2);
-                    prb_addStrSegment(gstr, "offset += 1;\n");
-                    addIndent(gstr, indentLevel + 1);
-                    prb_addStrSegment(gstr, "} break;\n");
+                    addLine(gstr, indentLevel + 1, "case 0b01: {");
+                    addLine(gstr, indentLevel + 1 + 1, "rmOp = (Operand) {.kind = OpID_Memory, .mem.id = r_m, .mem.disp = *((i8*)&input.data[offset])};");
+                    addLine(gstr, indentLevel + 1 + 1, "offset += 1;");
+                    addLine(gstr, indentLevel + 1, "} break;");
 
-                    addIndent(gstr, indentLevel + 1);
-                    prb_addStrSegment(gstr, "case 0b10: {\n");
-                    addIndent(gstr, indentLevel + 2);
-                    prb_addStrSegment(gstr, "instr->disp.u = (((u16)input.data[offset + 1]) << 8) | ((u16)input.data[offset]);\n");
-                    addIndent(gstr, indentLevel + 2);
-                    prb_addStrSegment(gstr, "offset += 2;\n");
-                    addIndent(gstr, indentLevel + 1);
-                    prb_addStrSegment(gstr, "} break;\n");
+                    addLine(gstr, indentLevel + 1, "case 0b10: {");
+                    addLine(gstr, indentLevel + 1 + 1, "rmOp = (Operand) {.kind = OpID_Memory, .mem.id = r_m, .mem.disp = (((u16)input.data[offset + 1]) << 8) | ((u16)input.data[offset])};");
+                    addLine(gstr, indentLevel + 1 + 1, "offset += 2;");
+                    addLine(gstr, indentLevel + 1, "} break;");
 
                     addLine(gstr, indentLevel + 1, "case 0b11: {");
                     addLine(gstr, indentLevel + 1 + 1, "rmOp = (Operand) {.kind = OpID_Register, .reg.id = w ? r_m : r_m %% 4, .reg.bytes = w ? 2 : 1, .reg.offset = w == 0 && r_m > 0b11};");
                     addLine(gstr, indentLevel + 1, "} break;");
 
-                    addIndent(gstr, indentLevel);
-                    prb_addStrSegment(gstr, "}\n\n");
+                    addLine(gstr, indentLevel, "}\n");
                 } else if (prb_streq(bit.name, STR("data_lo"))) {
                     dataField = true;
                     addIndent(gstr, indentLevel);
@@ -311,7 +298,7 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
         }
 
         if (dataField) {
-            addLine(gstr, indentLevel, "instr->op2 = (Operand) {.kind = OpID_Immediate, .immediate = data};");
+            addLine(gstr, indentLevel, "instr->op2 = (Operand) {.kind = OpID_Immediate, .immediate.val = data, .immediate.bytes = w ? 2 : 1};");
         }
     }
 }
@@ -498,7 +485,7 @@ main() {
     // NOTE(khvorov) Compile and run the main file
     {
         Str hmout = prb_replaceExt(arena, hmpath, STR("exe"));
-        execCmd(arena, prb_fmt(arena, "clang -g -Og -Wall -Wextra %.*s -o %.*s", LIT(hmpath), LIT(hmout)));
+        execCmd(arena, prb_fmt(arena, "clang -g -Wall -Wextra %.*s -o %.*s", LIT(hmpath), LIT(hmout)));
         execCmd(arena, hmout);
     }
 
