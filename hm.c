@@ -121,6 +121,7 @@ decode(Arena* arena, prb_Bytes input) {
                 u8 r_m = (input.data[offset] >> 0) & 0b00000111;
                 offset += 1;
 
+                Operand rmOp = {};
                 switch (mod) {
                     case 0b00: {
                         if (r_m == 0b110) {
@@ -136,22 +137,19 @@ decode(Arena* arena, prb_Bytes input) {
                         instr->disp.u = (((u16)input.data[offset + 1]) << 8) | ((u16)input.data[offset]);
                         offset += 2;
                     } break;
-                    case 0b11: break;
+                    case 0b11: {
+                        rmOp = (Operand) {.kind = OpID_Register, .reg.id = w ? r_m : r_m % 4, .reg.bytes = w ? 2 : 1, .reg.offset = w == 0 && r_m > 0b11};
+                    } break;
                 }
 
-                i32 regBytes = w ? 2 : 1;
+                Operand regOp = {.kind = OpID_Register, .reg.id = w ? reg : reg % 4, .reg.bytes = w ? 2 : 1, .reg.offset = w == 0 && reg > 0b11};
 
-                instr->op1 = (Operand) {.kind = OpID_Register, .reg.id = reg, .reg.bytes = regBytes};
-                if (!w) {
-                    instr->op1.reg.offset = reg > 0b11;
-                    instr->op1.reg.id = reg % 4;
-                }
-
-                instr->op2 = (Operand) {.kind = OpID_Register, .reg.id = r_m, .reg.bytes = regBytes};
-                if (!d) {
-                    Operand temp = instr->op1;
-                    instr->op1 = instr->op2;
-                    instr->op2 = temp;
+                if (d) {
+                    instr->op1 = regOp;
+                    instr->op2 = rmOp;
+                } else {
+                    instr->op1 = rmOp;
+                    instr->op2 = regOp;
                 }
             } break;
 
@@ -168,6 +166,7 @@ decode(Arena* arena, prb_Bytes input) {
                 u8 r_m = (input.data[offset] >> 0) & 0b00000111;
                 offset += 1;
 
+                Operand rmOp = {};
                 switch (mod) {
                     case 0b00: {
                         if (r_m == 0b110) {
@@ -183,7 +182,9 @@ decode(Arena* arena, prb_Bytes input) {
                         instr->disp.u = (((u16)input.data[offset + 1]) << 8) | ((u16)input.data[offset]);
                         offset += 2;
                     } break;
-                    case 0b11: break;
+                    case 0b11: {
+                        rmOp = (Operand) {.kind = OpID_Register, .reg.id = w ? r_m : r_m % 4, .reg.bytes = w ? 2 : 1, .reg.offset = w == 0 && r_m > 0b11};
+                    } break;
                 }
 
                 u16 data = input.data[offset];
@@ -193,9 +194,6 @@ decode(Arena* arena, prb_Bytes input) {
                     offset += 1;
                 }
 
-                i32 regBytes = w ? 2 : 1;
-
-                instr->op1 = (Operand) {.kind = OpID_Register, .reg.id = r_m, .reg.bytes = regBytes};
             } break;
         }
         // @end

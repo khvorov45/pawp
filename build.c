@@ -103,6 +103,20 @@ addIndent(prb_GrowingStr* gstr, i32 indentLevel) {
 }
 
 function void
+prb_ATTRIBUTE_FORMAT(3, 4)
+    addLine(prb_GrowingStr* gstr, i32 indentLevel, char* fmt, ...) {
+    addIndent(gstr, indentLevel);
+    prb_assert(gstr->arena->lockedForStr);
+    va_list args;
+    va_start(args, fmt);
+    prb_Str seg = prb_vfmtCustomBuffer((uint8_t*)prb_arenaFreePtr(gstr->arena), (int32_t)prb_min(prb_arenaFreeSize(gstr->arena), INT32_MAX), fmt, args);
+    prb_arenaChangeUsed(gstr->arena, seg.len);
+    gstr->str.len += seg.len;
+    va_end(args);
+    prb_addStrSegment(gstr, "\n");
+}
+
+function void
 codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
     assert(arrlen(instrs) > 0);
     if (arrlen(instrs) > 1) {
@@ -201,8 +215,8 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
                 BitDesc bit = byte.bits[0];
                 assert(bit.kind == BitDescKind_Named);
                 if (prb_streq(bit.name, STR("disp_lo"))) {
-                    addIndent(gstr, indentLevel);
-                    prb_addStrSegment(gstr, "switch (mod) {\n");
+                    addLine(gstr, indentLevel, "Operand rmOp = {};");
+                    addLine(gstr, indentLevel, "switch (mod) {");
 
                     addIndent(gstr, indentLevel + 1);
                     prb_addStrSegment(gstr, "case 0b00: {\n");
@@ -235,8 +249,9 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
                     addIndent(gstr, indentLevel + 1);
                     prb_addStrSegment(gstr, "} break;\n");
 
-                    addIndent(gstr, indentLevel + 1);
-                    prb_addStrSegment(gstr, "case 0b11: break;\n");
+                    addLine(gstr, indentLevel + 1, "case 0b11: {");
+                    addLine(gstr, indentLevel + 1 + 1, "rmOp = (Operand) {.kind = OpID_Register, .reg.id = w ? r_m : r_m %% 4, .reg.bytes = w ? 2 : 1, .reg.offset = w == 0 && r_m > 0b11};");
+                    addLine(gstr, indentLevel + 1, "} break;");
 
                     addIndent(gstr, indentLevel);
                     prb_addStrSegment(gstr, "}\n\n");
@@ -268,48 +283,18 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
             }
         }
 
-        if (wField) {
-            addIndent(gstr, indentLevel);
-            prb_addStrSegment(gstr, "i32 regBytes = w ? 2 : 1;\n\n");
-        }        
-
         if (regField) {
-            addIndent(gstr, indentLevel);
-            prb_addStrSegment(gstr, "instr->op1 = (Operand) {.kind = OpID_Register, .reg.id = reg, .reg.bytes = regBytes};\n");
-            addIndent(gstr, indentLevel);
-            prb_addStrSegment(gstr, "if (!w) {\n");
-            addIndent(gstr, indentLevel + 1);
-            prb_addStrSegment(gstr, "instr->op1.reg.offset = reg > 0b11;\n");
-            addIndent(gstr, indentLevel + 1);
-            prb_addStrSegment(gstr, "instr->op1.reg.id = reg %% 4;\n");
-            addIndent(gstr, indentLevel);
-            prb_addStrSegment(gstr, "}\n");
-
-            prb_addStrSegment(gstr, "\n");
+            addLine(gstr, indentLevel, "Operand regOp = {.kind = OpID_Register, .reg.id = w ? reg : reg %% 4, .reg.bytes = w ? 2 : 1, .reg.offset = w == 0 && reg > 0b11};\n");
         }
 
-        if (rmField) {
-            i32 opIndex = 1;
-            if (regField) {
-                opIndex = 2;
-            }
-            addIndent(gstr, indentLevel);
-            prb_addStrSegment(gstr, "instr->op%d = (Operand) {.kind = OpID_Register, .reg.id = r_m, .reg.bytes = regBytes};\n", opIndex);
-        }
-
-        if (dField) {
-            addIndent(gstr, indentLevel);
-            prb_addStrSegment(gstr, "if (!d) {\n");
-
-            addIndent(gstr, indentLevel + 1);
-            prb_addStrSegment(gstr, "Operand temp = instr->op1;\n");
-            addIndent(gstr, indentLevel + 1);
-            prb_addStrSegment(gstr, "instr->op1 = instr->op2;\n");
-            addIndent(gstr, indentLevel + 1);
-            prb_addStrSegment(gstr, "instr->op2 = temp;\n");
-
-            addIndent(gstr, indentLevel);
-            prb_addStrSegment(gstr, "}\n");
+        if (regField && rmField) {
+            addLine(gstr, indentLevel, "if (d) {");
+            addLine(gstr, indentLevel + 1, "instr->op1 = regOp;");
+            addLine(gstr, indentLevel + 1, "instr->op2 = rmOp;");
+            addLine(gstr, indentLevel, "} else {");
+            addLine(gstr, indentLevel + 1, "instr->op1 = rmOp;");
+            addLine(gstr, indentLevel + 1, "instr->op2 = regOp;");
+            addLine(gstr, indentLevel, "}");
         }
     }
 }
