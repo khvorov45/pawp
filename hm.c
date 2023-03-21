@@ -32,6 +32,7 @@ typedef enum InstrKind {
     InstrKind_mov_RegisterMemory_ToFrom_Register,
     InstrKind_mov_Immediate_To_RegisterMemory,
     InstrKind_mov_Immediate_To_Register,
+    InstrKind_mov_Memory_To_Accumulator,
 } InstrKind;
 
 typedef enum RegisterID {
@@ -157,6 +158,26 @@ decode(Arena* arena, prb_Bytes input) {
                     instr->op1 = rmOp;
                     instr->op2 = regOp;
                 }
+            } break;
+
+            // mov(Memory_To_Accumulator)
+            case 0b1010: {
+                instr->kind = InstrKind_mov_Memory_To_Accumulator;
+
+                u8 byte0bit0_literal = (input.data[offset] >> 1) & 0b01111111;
+                assert(byte0bit0_literal == 0b1010000);
+                u8 w = (input.data[offset] >> 0) & 0b00000001;
+                offset += 1;
+
+                u16 addr = input.data[offset];
+                offset += 1;
+                if (w == 1) {
+                    addr = ((u16)input.data[offset] << 8) | addr;
+                    offset += 1;
+                }
+
+                instr->op1 = (Operand) {.kind = OpID_Register, .reg.id = RegisterID_AX, .reg.bytes = w ? 2 : 1};
+                instr->op2 = (Operand) {.kind = OpID_Memory, .mem.direct = true, .mem.disp = addr};
             } break;
 
             // mov(Immediate_To_Register)
@@ -299,7 +320,8 @@ test_decode(Arena* arena, Str input) {
         Instr instr = decodedArray.ptr[instrInd];
         switch (instr.kind) {
             case InstrKind_mov_RegisterMemory_ToFrom_Register:
-            case InstrKind_mov_Immediate_To_Register: {
+            case InstrKind_mov_Immediate_To_Register:
+            case InstrKind_mov_Memory_To_Accumulator: {
                 case InstrKind_mov_Immediate_To_RegisterMemory:
                     prb_addStrSegment(&reincode, "mov ");
                     addOpStr(&reincode, instr.op1);
@@ -366,8 +388,8 @@ main() {
             "mov [di + 901], word 347\n"
             "mov bp, [5]\n"
             "mov bx, [3458]\n"
-            // "mov ax, [2555]\n"
-            // "mov ax, [16]\n"
+            "mov ax, [2555]\n"
+            "mov ax, [16]\n"
             // "mov [2554], ax\n"
             // "mov [15], ax\n"
 

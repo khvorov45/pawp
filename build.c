@@ -176,6 +176,7 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
         bool dField = false;
         bool wField = false;
         bool dataField = false;
+        bool memoryToAccumulator = false;
 
         for (i32 byteInd = 0; byteInd < arrlen(instr.bytes); byteInd++) {
             ByteDesc byte = instr.bytes[byteInd];
@@ -186,6 +187,11 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
                 i32 bitsLeft = 8;
                 for (i32 bitInd = 0; bitInd < arrlen(byte.bits); bitInd++) {
                     BitDesc bit = byte.bits[bitInd];
+
+                    if (byteInd == 0 && bitInd == 0) {
+                        assert(bit.kind == BitDescKind_Literal);
+                        memoryToAccumulator = memoryToAccumulator || bit.literal == 0b1010000;
+                    }
 
                     addIndent(gstr, indentLevel);
                     switch (bit.kind) {
@@ -252,18 +258,19 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
                     addLine(gstr, indentLevel, "}\n");
                 } else if (prb_streq(bit.name, STR("data_lo"))) {
                     dataField = true;
-                    addIndent(gstr, indentLevel);
-                    prb_addStrSegment(gstr, "u16 data = input.data[offset];\n");
-                    addIndent(gstr, indentLevel);
-                    prb_addStrSegment(gstr, "offset += 1;\n");
-                    addIndent(gstr, indentLevel);
-                    prb_addStrSegment(gstr, "if (w == 1) {\n");
-                    addIndent(gstr, indentLevel + 1);
-                    prb_addStrSegment(gstr, "data = ((u16)input.data[offset] << 8) | data;\n");
-                    addIndent(gstr, indentLevel + 1);
-                    prb_addStrSegment(gstr, "offset += 1;\n");
-                    addIndent(gstr, indentLevel);
-                    prb_addStrSegment(gstr, "}\n\n");
+                    addLine(gstr, indentLevel, "u16 data = input.data[offset];");
+                    addLine(gstr, indentLevel, "offset += 1;");
+                    addLine(gstr, indentLevel, "if (w == 1) {");
+                    addLine(gstr, indentLevel + 1, "data = ((u16)input.data[offset] << 8) | data;");
+                    addLine(gstr, indentLevel + 1, "offset += 1;");
+                    addLine(gstr, indentLevel, "}\n");
+                } else if (prb_streq(bit.name, STR("addr_lo"))) {
+                    addLine(gstr, indentLevel, "u16 addr = input.data[offset];");
+                    addLine(gstr, indentLevel, "offset += 1;");
+                    addLine(gstr, indentLevel, "if (w == 1) {");
+                    addLine(gstr, indentLevel + 1, "addr = ((u16)input.data[offset] << 8) | addr;");
+                    addLine(gstr, indentLevel + 1, "offset += 1;");
+                    addLine(gstr, indentLevel, "}\n");
                 } else {
                     assert(!"unrecognized");
                 }
@@ -295,6 +302,9 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
             addLine(gstr, indentLevel, "instr->op1 = regOp;");
         } else if (rmField) {
             addLine(gstr, indentLevel, "instr->op1 = rmOp;");
+        } else if (memoryToAccumulator) {
+            addLine(gstr, indentLevel, "instr->op1 = (Operand) {.kind = OpID_Register, .reg.id = RegisterID_AX, .reg.bytes = w ? 2 : 1};");
+            addLine(gstr, indentLevel, "instr->op2 = (Operand) {.kind = OpID_Memory, .mem.direct = true, .mem.disp = addr};");
         }
 
         if (dataField) {
