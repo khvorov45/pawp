@@ -155,6 +155,7 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
                 BitDesc secondBit = secondByte.bits[1];
                 assert(secondBit.kind == BitDescKind_Literal);
                 assert(secondBit.bitCount == 3);
+                assert(secondByte.bits[0].bitCount == 2);
                 firstBit = secondBit;
             }
             u8 literal = firstBit.literal;
@@ -214,7 +215,7 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
                         assert(bit.kind == BitDescKind_Literal);
                         memoryToAccumulator = memoryToAccumulator || bit.literal == 0b1010000;
                         accumulatorToMemory = accumulatorToMemory || bit.literal == 0b1010001;
-                        op1IsAccumulator = op1IsAccumulator || bit.literal == 0b0000010;
+                        op1IsAccumulator = op1IsAccumulator || bit.literal == 0b0000010 || bit.literal == 0b0010110;
                     }
 
                     addIndent(gstr, indentLevel);
