@@ -149,6 +149,7 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
         for (u8 caseid = 0; caseid < arrlen(cases); caseid++) {
             Instr* caseInstrs = cases[caseid];
             if (arrlen(caseInstrs) > 0) {
+                assert(arrlen(caseInstrs) < arrlen(instrs));
                 prb_addStrSegment(gstr, "\n");
                 if (arrlen(caseInstrs) == 1) {
                     Instr instr = caseInstrs[0];
@@ -177,6 +178,7 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
         bool wField = false;
         bool dataField = false;
         bool memoryToAccumulator = false;
+        bool accumulatorToMemory = false;
 
         for (i32 byteInd = 0; byteInd < arrlen(instr.bytes); byteInd++) {
             ByteDesc byte = instr.bytes[byteInd];
@@ -191,6 +193,7 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
                     if (byteInd == 0 && bitInd == 0) {
                         assert(bit.kind == BitDescKind_Literal);
                         memoryToAccumulator = memoryToAccumulator || bit.literal == 0b1010000;
+                        accumulatorToMemory = accumulatorToMemory || bit.literal == 0b1010001;
                     }
 
                     addIndent(gstr, indentLevel);
@@ -305,6 +308,9 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
         } else if (memoryToAccumulator) {
             addLine(gstr, indentLevel, "instr->op1 = (Operand) {.kind = OpID_Register, .reg.id = RegisterID_AX, .reg.bytes = w ? 2 : 1};");
             addLine(gstr, indentLevel, "instr->op2 = (Operand) {.kind = OpID_Memory, .mem.direct = true, .mem.disp = addr};");
+        } else if (accumulatorToMemory) {
+            addLine(gstr, indentLevel, "instr->op1 = (Operand) {.kind = OpID_Memory, .mem.direct = true, .mem.disp = addr};");
+            addLine(gstr, indentLevel, "instr->op2 = (Operand) {.kind = OpID_Register, .reg.id = RegisterID_AX, .reg.bytes = w ? 2 : 1};");
         }
 
         if (dataField) {
