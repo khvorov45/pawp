@@ -34,6 +34,7 @@ typedef enum InstrKind {
     InstrKind_mov_Immediate_To_Register,
     InstrKind_mov_Memory_To_Accumulator,
     InstrKind_mov_Accumulator_To_Memory,
+    InstrKind_add_RegisterMemory_With_Register_To_Either,
 } InstrKind;
 
 typedef enum RegisterID {
@@ -111,6 +112,55 @@ decode(Arena* arena, prb_Bytes input) {
         // @codegen
         u8 first4Bits = input.data[offset] >> 4;
         switch (first4Bits) {
+
+            // add(RegisterMemory_With_Register_To_Either)
+            case 0b0000: {
+                instr->kind = InstrKind_add_RegisterMemory_With_Register_To_Either;
+
+                u8 byte0bit0_literal = (input.data[offset] >> 2) & 0b00111111;
+                assert(byte0bit0_literal == 0b000000);
+                u8 d = (input.data[offset] >> 1) & 0b00000001;
+                u8 w = (input.data[offset] >> 0) & 0b00000001;
+                offset += 1;
+
+                u8 mod = (input.data[offset] >> 6) & 0b00000011;
+                u8 reg = (input.data[offset] >> 3) & 0b00000111;
+                u8 r_m = (input.data[offset] >> 0) & 0b00000111;
+                offset += 1;
+
+                Operand rmOp = {};
+                switch (mod) {
+                    case 0b00: {
+                        rmOp = (Operand) {.kind = OpID_Memory, .mem.id = r_m};
+                        if (r_m == 0b110) {
+                            rmOp.mem.direct = true;
+                            rmOp.mem.disp = (((u16)input.data[offset + 1]) << 8) | ((u16)input.data[offset]);
+                            offset += 2;
+                        }
+                    } break;
+                    case 0b01: {
+                        rmOp = (Operand) {.kind = OpID_Memory, .mem.id = r_m, .mem.disp = *((i8*)&input.data[offset])};
+                        offset += 1;
+                    } break;
+                    case 0b10: {
+                        rmOp = (Operand) {.kind = OpID_Memory, .mem.id = r_m, .mem.disp = (((u16)input.data[offset + 1]) << 8) | ((u16)input.data[offset])};
+                        offset += 2;
+                    } break;
+                    case 0b11: {
+                        rmOp = (Operand) {.kind = OpID_Register, .reg.id = w ? r_m : r_m % 4, .reg.bytes = w ? 2 : 1, .reg.offset = w == 0 && r_m > 0b11};
+                    } break;
+                }
+
+                Operand regOp = {.kind = OpID_Register, .reg.id = w ? reg : reg % 4, .reg.bytes = w ? 2 : 1, .reg.offset = w == 0 && reg > 0b11};
+
+                if (d) {
+                    instr->op1 = regOp;
+                    instr->op2 = rmOp;
+                } else {
+                    instr->op1 = rmOp;
+                    instr->op2 = regOp;
+                }
+            } break;
 
             // mov(RegisterMemory_ToFrom_Register)
             case 0b1000: {
@@ -350,16 +400,21 @@ test_decode(Arena* arena, Str input) {
         switch (instr.kind) {
             case InstrKind_mov_RegisterMemory_ToFrom_Register:
             case InstrKind_mov_Immediate_To_Register:
+            case InstrKind_mov_Immediate_To_RegisterMemory:
             case InstrKind_mov_Memory_To_Accumulator:
             case InstrKind_mov_Accumulator_To_Memory: {
-                case InstrKind_mov_Immediate_To_RegisterMemory:
-                    prb_addStrSegment(&reincode, "mov ");
-                    addOpStr(&reincode, instr.op1);
-                    prb_addStrSegment(&reincode, ", ");
-                    addOpStr(&reincode, instr.op2);
-                    prb_addStrSegment(&reincode, "\n");
+                prb_addStrSegment(&reincode, "mov ");
+            } break;
+
+            case InstrKind_add_RegisterMemory_With_Register_To_Either: {
+                prb_addStrSegment(&reincode, "add ");
             } break;
         }
+
+        addOpStr(&reincode, instr.op1);
+        prb_addStrSegment(&reincode, ", ");
+        addOpStr(&reincode, instr.op2);
+        prb_addStrSegment(&reincode, "\n");
     }
     Str reincodeAsm = prb_endStr(&reincode);
 
@@ -423,8 +478,8 @@ main() {
             "mov [2554], ax\n"
             "mov [15], ax\n"
 
-            // "add bx, [bx+si]\n"
-            // "add bx, [bp]\n"
+            "add bx, [bx+si]\n"
+            "add bx, [bp]\n"
             // "add si, 2\n"
             // "add bp, 2\n"
             // "add cx, 8\n"
