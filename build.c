@@ -120,18 +120,27 @@ function void
 codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
     assert(arrlen(instrs) > 0);
     if (arrlen(instrs) > 1) {
-        i32 minBitsInFirstLiteral = 8;
+        i32  minBitsInFirstLiteral = 8;
+        bool firstLiteralsAreAllTheSame = true;
+        u8   firstInstrFirstLiteral = instrs[0].bytes[0].bits[0].literal;
         for (i32 instrInd = 0; instrInd < arrlen(instrs); instrInd++) {
             Instr   instr = instrs[instrInd];
             BitDesc firstBit = instr.bytes[0].bits[0];
             assert(firstBit.kind == BitDescKind_Literal);
             minBitsInFirstLiteral = prb_min(minBitsInFirstLiteral, firstBit.bitCount);
+            if (firstInstrFirstLiteral != firstBit.literal) {
+                firstLiteralsAreAllTheSame = false;
+            }
         }
 
-        addIndent(gstr, indentLevel);
-        prb_addStrSegment(gstr, "u8 first%dBits = input.data[offset] >> %d;\n", minBitsInFirstLiteral, 8 - minBitsInFirstLiteral);
-        addIndent(gstr, indentLevel);
-        prb_addStrSegment(gstr, "switch (first%dBits) {\n", minBitsInFirstLiteral);
+        if (firstLiteralsAreAllTheSame) {
+            minBitsInFirstLiteral = 3;
+            addLine(gstr, indentLevel, "u8 secondByte3Bits = (input.data[offset + 1] >> 3) & 0b00000111;");
+            addLine(gstr, indentLevel, "switch (secondByte3Bits) {");
+        } else {
+            addLine(gstr, indentLevel, "u8 first%dBits = input.data[offset] >> %d;", minBitsInFirstLiteral, 8 - minBitsInFirstLiteral);
+            addLine(gstr, indentLevel, "switch (first%dBits) {", minBitsInFirstLiteral);
+        }
 
         Instr** cases = 0;
         i32     totalPossibleCases = 1 << minBitsInFirstLiteral;
@@ -139,9 +148,18 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
         for (i32 instrInd = 0; instrInd < arrlen(instrs); instrInd++) {
             Instr   instr = instrs[instrInd];
             BitDesc firstBit = instr.bytes[0].bits[0];
-            u8      literal = firstBit.literal;
-            u8      shift = firstBit.bitCount - minBitsInFirstLiteral;
-            u8      switchLiteral = literal >> shift;
+            if (firstLiteralsAreAllTheSame) {
+                assert(arrlen(instr.bytes) >= 2);
+                ByteDesc secondByte = instr.bytes[1];
+                assert(arrlen(secondByte.bits) >= 2);
+                BitDesc secondBit = secondByte.bits[1];
+                assert(secondBit.kind == BitDescKind_Literal);
+                assert(secondBit.bitCount == 3);
+                firstBit = secondBit;
+            }
+            u8 literal = firstBit.literal;
+            u8 shift = firstBit.bitCount - minBitsInFirstLiteral;
+            u8 switchLiteral = literal >> shift;
             assert(switchLiteral < arrlen(cases));
             arrput(cases[switchLiteral], instr);
         }

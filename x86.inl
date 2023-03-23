@@ -7,3 +7,4 @@ add(RegisterMemory_With_Register_To_Either) | 000000 d(1) w(1) | mod(2) reg(3) r
 add(Immediate_To_RegisterMemory)            | 100000 s(1) w(1) | mod(2) 000 r_m(3) | disp_lo | disp_hi | data_lo | data_hi
 add(Immediate_To_Accumulator)               | 0000010 w(1) | data_lo | data_hi
 sub(RegisterMemory_With_Register_To_Either) | 001010 d(1) w(1) | mod(2) reg(3) r_m(3) | disp_lo | disp_hi
+sub(Immediate_To_RegisterMemory)            | 100000 s(1) w(1) | mod(2) 101 r_m(3) | disp_lo | disp_hi | data_lo | data_hi

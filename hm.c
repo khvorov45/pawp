@@ -38,6 +38,7 @@ typedef enum InstrKind {
     InstrKind_add_Immediate_To_RegisterMemory,
     InstrKind_add_Immediate_To_Accumulator,
     InstrKind_sub_RegisterMemory_With_Register_To_Either,
+    InstrKind_sub_Immediate_To_RegisterMemory,
 } InstrKind;
 
 typedef enum RegisterID {
@@ -246,54 +247,112 @@ decode(Arena* arena, prb_Bytes input) {
                 u8 first6Bits = input.data[offset] >> 2;
                 switch (first6Bits) {
 
-                    // add(Immediate_To_RegisterMemory)
                     case 0b100000: {
-                        instr->kind = InstrKind_add_Immediate_To_RegisterMemory;
+                        u8 secondByte3Bits = (input.data[offset + 1] >> 3) & 0b00000111;
+                        switch (secondByte3Bits) {
 
-                        u8 byte0bit0_literal = (input.data[offset] >> 2) & 0b00111111;
-                        assert(byte0bit0_literal == 0b100000);
-                        u8 s = (input.data[offset] >> 1) & 0b00000001;
-                        u8 w = (input.data[offset] >> 0) & 0b00000001;
-                        offset += 1;
+                            // add(Immediate_To_RegisterMemory)
+                            case 0b000: {
+                                instr->kind = InstrKind_add_Immediate_To_RegisterMemory;
 
-                        u8 mod = (input.data[offset] >> 6) & 0b00000011;
-                        u8 byte1bit1_literal = (input.data[offset] >> 3) & 0b00000111;
-                        assert(byte1bit1_literal == 0b000);
-                        u8 r_m = (input.data[offset] >> 0) & 0b00000111;
-                        offset += 1;
-
-                        Operand rmOp = {};
-                        switch (mod) {
-                            case 0b00: {
-                                rmOp = (Operand) {.kind = OpID_Memory, .mem.id = r_m};
-                                if (r_m == 0b110) {
-                                    rmOp.mem.direct = true;
-                                    rmOp.mem.disp = (((u16)input.data[offset + 1]) << 8) | ((u16)input.data[offset]);
-                                    offset += 2;
-                                }
-                            } break;
-                            case 0b01: {
-                                rmOp = (Operand) {.kind = OpID_Memory, .mem.id = r_m, .mem.disp = *((i8*)&input.data[offset])};
+                                u8 byte0bit0_literal = (input.data[offset] >> 2) & 0b00111111;
+                                assert(byte0bit0_literal == 0b100000);
+                                u8 s = (input.data[offset] >> 1) & 0b00000001;
+                                u8 w = (input.data[offset] >> 0) & 0b00000001;
                                 offset += 1;
-                            } break;
-                            case 0b10: {
-                                rmOp = (Operand) {.kind = OpID_Memory, .mem.id = r_m, .mem.disp = (((u16)input.data[offset + 1]) << 8) | ((u16)input.data[offset])};
-                                offset += 2;
-                            } break;
-                            case 0b11: {
-                                rmOp = (Operand) {.kind = OpID_Register, .reg.id = w ? r_m : r_m % 4, .reg.bytes = w ? 2 : 1, .reg.offset = w == 0 && r_m > 0b11};
-                            } break;
-                        }
 
-                        u16 data = input.data[offset];
-                        offset += 1;
-                        if (w == 1 && s == 0) {
-                            data = ((u16)input.data[offset] << 8) | data;
-                            offset += 1;
-                        }
+                                u8 mod = (input.data[offset] >> 6) & 0b00000011;
+                                u8 byte1bit1_literal = (input.data[offset] >> 3) & 0b00000111;
+                                assert(byte1bit1_literal == 0b000);
+                                u8 r_m = (input.data[offset] >> 0) & 0b00000111;
+                                offset += 1;
 
-                        instr->op1 = rmOp;
-                        instr->op2 = (Operand) {.kind = OpID_Immediate, .immediate.val = data, .immediate.bytes = w ? 2 : 1};
+                                Operand rmOp = {};
+                                switch (mod) {
+                                    case 0b00: {
+                                        rmOp = (Operand) {.kind = OpID_Memory, .mem.id = r_m};
+                                        if (r_m == 0b110) {
+                                            rmOp.mem.direct = true;
+                                            rmOp.mem.disp = (((u16)input.data[offset + 1]) << 8) | ((u16)input.data[offset]);
+                                            offset += 2;
+                                        }
+                                    } break;
+                                    case 0b01: {
+                                        rmOp = (Operand) {.kind = OpID_Memory, .mem.id = r_m, .mem.disp = *((i8*)&input.data[offset])};
+                                        offset += 1;
+                                    } break;
+                                    case 0b10: {
+                                        rmOp = (Operand) {.kind = OpID_Memory, .mem.id = r_m, .mem.disp = (((u16)input.data[offset + 1]) << 8) | ((u16)input.data[offset])};
+                                        offset += 2;
+                                    } break;
+                                    case 0b11: {
+                                        rmOp = (Operand) {.kind = OpID_Register, .reg.id = w ? r_m : r_m % 4, .reg.bytes = w ? 2 : 1, .reg.offset = w == 0 && r_m > 0b11};
+                                    } break;
+                                }
+
+                                u16 data = input.data[offset];
+                                offset += 1;
+                                if (w == 1 && s == 0) {
+                                    data = ((u16)input.data[offset] << 8) | data;
+                                    offset += 1;
+                                }
+
+                                instr->op1 = rmOp;
+                                instr->op2 = (Operand) {.kind = OpID_Immediate, .immediate.val = data, .immediate.bytes = w ? 2 : 1};
+                            } break;
+
+                            // sub(Immediate_To_RegisterMemory)
+                            case 0b101: {
+                                instr->kind = InstrKind_sub_Immediate_To_RegisterMemory;
+
+                                u8 byte0bit0_literal = (input.data[offset] >> 2) & 0b00111111;
+                                assert(byte0bit0_literal == 0b100000);
+                                u8 s = (input.data[offset] >> 1) & 0b00000001;
+                                u8 w = (input.data[offset] >> 0) & 0b00000001;
+                                offset += 1;
+
+                                u8 mod = (input.data[offset] >> 6) & 0b00000011;
+                                u8 byte1bit1_literal = (input.data[offset] >> 3) & 0b00000111;
+                                assert(byte1bit1_literal == 0b101);
+                                u8 r_m = (input.data[offset] >> 0) & 0b00000111;
+                                offset += 1;
+
+                                Operand rmOp = {};
+                                switch (mod) {
+                                    case 0b00: {
+                                        rmOp = (Operand) {.kind = OpID_Memory, .mem.id = r_m};
+                                        if (r_m == 0b110) {
+                                            rmOp.mem.direct = true;
+                                            rmOp.mem.disp = (((u16)input.data[offset + 1]) << 8) | ((u16)input.data[offset]);
+                                            offset += 2;
+                                        }
+                                    } break;
+                                    case 0b01: {
+                                        rmOp = (Operand) {.kind = OpID_Memory, .mem.id = r_m, .mem.disp = *((i8*)&input.data[offset])};
+                                        offset += 1;
+                                    } break;
+                                    case 0b10: {
+                                        rmOp = (Operand) {.kind = OpID_Memory, .mem.id = r_m, .mem.disp = (((u16)input.data[offset + 1]) << 8) | ((u16)input.data[offset])};
+                                        offset += 2;
+                                    } break;
+                                    case 0b11: {
+                                        rmOp = (Operand) {.kind = OpID_Register, .reg.id = w ? r_m : r_m % 4, .reg.bytes = w ? 2 : 1, .reg.offset = w == 0 && r_m > 0b11};
+                                    } break;
+                                }
+
+                                u16 data = input.data[offset];
+                                offset += 1;
+                                if (w == 1 && s == 0) {
+                                    data = ((u16)input.data[offset] << 8) | data;
+                                    offset += 1;
+                                }
+
+                                instr->op1 = rmOp;
+                                instr->op2 = (Operand) {.kind = OpID_Immediate, .immediate.val = data, .immediate.bytes = w ? 2 : 1};
+                            } break;
+                        
+                            default: assert(!"unimplemented"); break;
+                        }
                     } break;
 
                     // mov(RegisterMemory_ToFrom_Register)
@@ -550,7 +609,8 @@ test_decode(Arena* arena, Str input) {
                 prb_addStrSegment(&reincode, "add ");
             } break;
 
-            case InstrKind_sub_RegisterMemory_With_Register_To_Either: {
+            case InstrKind_sub_RegisterMemory_With_Register_To_Either:
+            case InstrKind_sub_Immediate_To_RegisterMemory: {
                 prb_addStrSegment(&reincode, "sub ");
             } break;
         }
@@ -649,23 +709,23 @@ main() {
 
             "sub bx, [bx+si]\n"
             "sub bx, [bp]\n"
-            // "sub si, 2\n"
-            // "sub bp, 2\n"
-            // "sub cx, 8\n"
-            // "sub bx, [bp + 0]\n"
-            // "sub cx, [bx + 2]\n"
-            // "sub bh, [bp + si + 4]\n"
-            // "sub di, [bp + di + 6]\n"
-            // "sub [bx+si], bx\n"
-            // "sub [bp], bx\n"
-            // "sub [bp + 0], bx\n"
-            // "sub [bx + 2], cx\n"
-            // "sub [bp + si + 4], bh\n"
-            // "sub [bp + di + 6], di\n"
-            // "sub byte [bx], 34\n"
-            // "sub word [bx + di], 29\n"
-            // "sub ax, [bp]\n"
-            // "sub al, [bx + si]\n"
+            "sub si, 2\n"
+            "sub bp, 2\n"
+            "sub cx, 8\n"
+            "sub bx, [bp + 0]\n"
+            "sub cx, [bx + 2]\n"
+            "sub bh, [bp + si + 4]\n"
+            "sub di, [bp + di + 6]\n"
+            "sub [bx+si], bx\n"
+            "sub [bp], bx\n"
+            "sub [bp + 0], bx\n"
+            "sub [bx + 2], cx\n"
+            "sub [bp + si + 4], bh\n"
+            "sub [bp + di + 6], di\n"
+            "sub byte [bx], 34\n"
+            "sub word [bx + di], 29\n"
+            "sub ax, [bp]\n"
+            "sub al, [bx + si]\n"
             // "sub ax, bx\n"
             // "sub al, ah\n"
             // "sub ax, 1000\n"
