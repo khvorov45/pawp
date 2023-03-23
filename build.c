@@ -176,6 +176,7 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
         bool rmField = false;
         bool dField = false;
         bool wField = false;
+        bool sField = false;
         bool dataField = false;
         bool memoryToAccumulator = false;
         bool accumulatorToMemory = false;
@@ -207,6 +208,7 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
                             rmField = rmField || prb_streq(bit.name, STR("r_m"));
                             dField = dField || prb_streq(bit.name, STR("d"));
                             wField = wField || prb_streq(bit.name, STR("w"));
+                            sField = sField || prb_streq(bit.name, STR("s"));
                         } break;
                     }
 
@@ -263,7 +265,11 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
                     dataField = true;
                     addLine(gstr, indentLevel, "u16 data = input.data[offset];");
                     addLine(gstr, indentLevel, "offset += 1;");
-                    addLine(gstr, indentLevel, "if (w == 1) {");
+                    if (sField) {
+                        addLine(gstr, indentLevel, "if (w == 1 && s == 0) {");
+                    } else {
+                        addLine(gstr, indentLevel, "if (w == 1) {");
+                    }
                     addLine(gstr, indentLevel + 1, "data = ((u16)input.data[offset] << 8) | data;");
                     addLine(gstr, indentLevel + 1, "offset += 1;");
                     addLine(gstr, indentLevel, "}\n");
