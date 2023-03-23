@@ -180,6 +180,7 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
         bool dataField = false;
         bool memoryToAccumulator = false;
         bool accumulatorToMemory = false;
+        bool op1IsAccumulator = false;
 
         for (i32 byteInd = 0; byteInd < arrlen(instr.bytes); byteInd++) {
             ByteDesc byte = instr.bytes[byteInd];
@@ -195,6 +196,7 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
                         assert(bit.kind == BitDescKind_Literal);
                         memoryToAccumulator = memoryToAccumulator || bit.literal == 0b1010000;
                         accumulatorToMemory = accumulatorToMemory || bit.literal == 0b1010001;
+                        op1IsAccumulator = op1IsAccumulator || bit.literal == 0b0000010;
                     }
 
                     addIndent(gstr, indentLevel);
@@ -317,6 +319,8 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
         } else if (accumulatorToMemory) {
             addLine(gstr, indentLevel, "instr->op1 = (Operand) {.kind = OpID_Memory, .mem.direct = true, .mem.disp = addr};");
             addLine(gstr, indentLevel, "instr->op2 = (Operand) {.kind = OpID_Register, .reg.id = RegisterID_AX, .reg.bytes = w ? 2 : 1};");
+        } else if (op1IsAccumulator) {
+            addLine(gstr, indentLevel, "instr->op1 = (Operand) {.kind = OpID_Register, .reg.id = RegisterID_AX, .reg.bytes = w ? 2 : 1};");
         }
 
         if (dataField) {
