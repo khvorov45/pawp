@@ -43,6 +43,26 @@ typedef enum InstrKind {
     InstrKind_cmp_RegisterMemory_And_Register,
     InstrKind_cmp_Immediate_With_RegisterMemory,
     InstrKind_cmp_Immediate_With_Accumulator,
+    InstrKind_je_Jump,
+    InstrKind_jl_Jump,
+    InstrKind_jle_Jump,
+    InstrKind_jb_Jump,
+    InstrKind_jbe_Jump,
+    InstrKind_jp_Jump,
+    InstrKind_jo_Jump,
+    InstrKind_js_Jump,
+    InstrKind_jne_Jump,
+    InstrKind_jnl_Jump,
+    InstrKind_jnle_Jump,
+    InstrKind_jnb_Jump,
+    InstrKind_jnbe_Jump,
+    InstrKind_jnp_Jump,
+    InstrKind_jno_Jump,
+    InstrKind_jns_Jump,
+    InstrKind_loop_Loop,
+    InstrKind_loopz_Loop,
+    InstrKind_loopnz_Loop,
+    InstrKind_jcxz_Jump,
 } InstrKind;
 
 typedef enum RegisterID {
@@ -68,9 +88,11 @@ typedef enum FormulaID {
 } FormulaID;
 
 typedef enum OpID {
+    OpID_None,
     OpID_Register,
     OpID_Memory,
     OpID_Immediate,
+    OpID_RelJump,
 } OpID;
 
 typedef struct Operand {
@@ -90,6 +112,7 @@ typedef struct Operand {
             u16 val;
             u8  bytes;
         } immediate;
+        i16 relJump;
     };
 } Operand;
 
@@ -346,6 +369,190 @@ decode(Arena* arena, prb_Bytes input) {
 
                         instr->op1 = (Operand) {.kind = OpID_Register, .reg.id = RegisterID_AX, .reg.bytes = w ? 2 : 1};
                         instr->op2 = (Operand) {.kind = OpID_Immediate, .immediate.val = data, .immediate.bytes = w ? 2 : 1};
+                    } break;
+                
+                    default: assert(!"unimplemented"); break;
+                }
+            } break;
+
+            case 0b0111: {
+                u8 first8Bits = input.data[offset] >> 0;
+                switch (first8Bits) {
+
+                    // jo(Jump)
+                    case 0b01110000: {
+                        instr->kind = InstrKind_jo_Jump;
+
+                        assert(input.data[offset] == 0b01110000);
+                        offset += 1;
+                        i16 relJump = *(i8*)(&input.data[offset]);
+                        offset += 1;
+                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                    } break;
+
+                    // jno(Jump)
+                    case 0b01110001: {
+                        instr->kind = InstrKind_jno_Jump;
+
+                        assert(input.data[offset] == 0b01110001);
+                        offset += 1;
+                        i16 relJump = *(i8*)(&input.data[offset]);
+                        offset += 1;
+                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                    } break;
+
+                    // jb(Jump)
+                    case 0b01110010: {
+                        instr->kind = InstrKind_jb_Jump;
+
+                        assert(input.data[offset] == 0b01110010);
+                        offset += 1;
+                        i16 relJump = *(i8*)(&input.data[offset]);
+                        offset += 1;
+                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                    } break;
+
+                    // jnb(Jump)
+                    case 0b01110011: {
+                        instr->kind = InstrKind_jnb_Jump;
+
+                        assert(input.data[offset] == 0b01110011);
+                        offset += 1;
+                        i16 relJump = *(i8*)(&input.data[offset]);
+                        offset += 1;
+                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                    } break;
+
+                    // je(Jump)
+                    case 0b01110100: {
+                        instr->kind = InstrKind_je_Jump;
+
+                        assert(input.data[offset] == 0b01110100);
+                        offset += 1;
+                        i16 relJump = *(i8*)(&input.data[offset]);
+                        offset += 1;
+                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                    } break;
+
+                    // jne(Jump)
+                    case 0b01110101: {
+                        instr->kind = InstrKind_jne_Jump;
+
+                        assert(input.data[offset] == 0b01110101);
+                        offset += 1;
+                        i16 relJump = *(i8*)(&input.data[offset]);
+                        offset += 1;
+                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                    } break;
+
+                    // jbe(Jump)
+                    case 0b01110110: {
+                        instr->kind = InstrKind_jbe_Jump;
+
+                        assert(input.data[offset] == 0b01110110);
+                        offset += 1;
+                        i16 relJump = *(i8*)(&input.data[offset]);
+                        offset += 1;
+                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                    } break;
+
+                    // jnbe(Jump)
+                    case 0b01110111: {
+                        instr->kind = InstrKind_jnbe_Jump;
+
+                        assert(input.data[offset] == 0b01110111);
+                        offset += 1;
+                        i16 relJump = *(i8*)(&input.data[offset]);
+                        offset += 1;
+                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                    } break;
+
+                    // js(Jump)
+                    case 0b01111000: {
+                        instr->kind = InstrKind_js_Jump;
+
+                        assert(input.data[offset] == 0b01111000);
+                        offset += 1;
+                        i16 relJump = *(i8*)(&input.data[offset]);
+                        offset += 1;
+                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                    } break;
+
+                    // jns(Jump)
+                    case 0b01111001: {
+                        instr->kind = InstrKind_jns_Jump;
+
+                        assert(input.data[offset] == 0b01111001);
+                        offset += 1;
+                        i16 relJump = *(i8*)(&input.data[offset]);
+                        offset += 1;
+                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                    } break;
+
+                    // jp(Jump)
+                    case 0b01111010: {
+                        instr->kind = InstrKind_jp_Jump;
+
+                        assert(input.data[offset] == 0b01111010);
+                        offset += 1;
+                        i16 relJump = *(i8*)(&input.data[offset]);
+                        offset += 1;
+                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                    } break;
+
+                    // jnp(Jump)
+                    case 0b01111011: {
+                        instr->kind = InstrKind_jnp_Jump;
+
+                        assert(input.data[offset] == 0b01111011);
+                        offset += 1;
+                        i16 relJump = *(i8*)(&input.data[offset]);
+                        offset += 1;
+                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                    } break;
+
+                    // jl(Jump)
+                    case 0b01111100: {
+                        instr->kind = InstrKind_jl_Jump;
+
+                        assert(input.data[offset] == 0b01111100);
+                        offset += 1;
+                        i16 relJump = *(i8*)(&input.data[offset]);
+                        offset += 1;
+                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                    } break;
+
+                    // jnl(Jump)
+                    case 0b01111101: {
+                        instr->kind = InstrKind_jnl_Jump;
+
+                        assert(input.data[offset] == 0b01111101);
+                        offset += 1;
+                        i16 relJump = *(i8*)(&input.data[offset]);
+                        offset += 1;
+                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                    } break;
+
+                    // jle(Jump)
+                    case 0b01111110: {
+                        instr->kind = InstrKind_jle_Jump;
+
+                        assert(input.data[offset] == 0b01111110);
+                        offset += 1;
+                        i16 relJump = *(i8*)(&input.data[offset]);
+                        offset += 1;
+                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                    } break;
+
+                    // jnle(Jump)
+                    case 0b01111111: {
+                        instr->kind = InstrKind_jnle_Jump;
+
+                        assert(input.data[offset] == 0b01111111);
+                        offset += 1;
+                        i16 relJump = *(i8*)(&input.data[offset]);
+                        offset += 1;
+                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
                     } break;
                 
                     default: assert(!"unimplemented"); break;
@@ -686,6 +893,58 @@ decode(Arena* arena, prb_Bytes input) {
                 instr->op1 = rmOp;
                 instr->op2 = (Operand) {.kind = OpID_Immediate, .immediate.val = data, .immediate.bytes = w ? 2 : 1};
             } break;
+
+            case 0b1110: {
+                u8 first8Bits = input.data[offset] >> 0;
+                switch (first8Bits) {
+
+                    // loopnz(Loop)
+                    case 0b11100000: {
+                        instr->kind = InstrKind_loopnz_Loop;
+
+                        assert(input.data[offset] == 0b11100000);
+                        offset += 1;
+                        i16 relJump = *(i8*)(&input.data[offset]);
+                        offset += 1;
+                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                    } break;
+
+                    // loopz(Loop)
+                    case 0b11100001: {
+                        instr->kind = InstrKind_loopz_Loop;
+
+                        assert(input.data[offset] == 0b11100001);
+                        offset += 1;
+                        i16 relJump = *(i8*)(&input.data[offset]);
+                        offset += 1;
+                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                    } break;
+
+                    // loop(Loop)
+                    case 0b11100010: {
+                        instr->kind = InstrKind_loop_Loop;
+
+                        assert(input.data[offset] == 0b11100010);
+                        offset += 1;
+                        i16 relJump = *(i8*)(&input.data[offset]);
+                        offset += 1;
+                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                    } break;
+
+                    // jcxz(Jump)
+                    case 0b11100011: {
+                        instr->kind = InstrKind_jcxz_Jump;
+
+                        assert(input.data[offset] == 0b11100011);
+                        offset += 1;
+                        i16 relJump = *(i8*)(&input.data[offset]);
+                        offset += 1;
+                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                    } break;
+                
+                    default: assert(!"unimplemented"); break;
+                }
+            } break;
         
             default: assert(!"unimplemented"); break;
         }
@@ -702,6 +961,9 @@ decode(Arena* arena, prb_Bytes input) {
 function void
 addOpStr(prb_GrowingStr* gstr, Operand op) {
     switch (op.kind) {
+        case OpID_None: {
+        } break;
+
         case OpID_Register: {
             char* regTable16[] = {"ax", "cx", "dx", "bx", "sp", "bp", "si", "di"};
             char* regTable8[] = {"al", "cl", "dl", "bl", "ah", "ch", "dh", "bh"};
@@ -732,6 +994,10 @@ addOpStr(prb_GrowingStr* gstr, Operand op) {
             char* sizes[] = {"byte", "word"};
             prb_addStrSegment(gstr, "%s %d", sizes[op.immediate.bytes - 1], op.immediate.val);
         } break;
+
+        case OpID_RelJump: {
+            prb_addStrSegment(gstr, "$+%d+2", op.relJump);
+        }
     }
 }
 
@@ -779,11 +1045,34 @@ test_decode(Arena* arena, Str input) {
             case InstrKind_cmp_Immediate_With_Accumulator: {
                 prb_addStrSegment(&reincode, "cmp ");
             } break;
+
+            case InstrKind_je_Jump: prb_addStrSegment(&reincode, "je "); break;
+            case InstrKind_jl_Jump: prb_addStrSegment(&reincode, "jl "); break;
+            case InstrKind_jle_Jump: prb_addStrSegment(&reincode, "jle "); break;
+            case InstrKind_jb_Jump: prb_addStrSegment(&reincode, "jb "); break;
+            case InstrKind_jbe_Jump: prb_addStrSegment(&reincode, "jbe "); break;
+            case InstrKind_jp_Jump: prb_addStrSegment(&reincode, "jp "); break;
+            case InstrKind_jo_Jump: prb_addStrSegment(&reincode, "jo "); break;
+            case InstrKind_js_Jump: prb_addStrSegment(&reincode, "js "); break;
+            case InstrKind_jne_Jump: prb_addStrSegment(&reincode, "jne "); break;
+            case InstrKind_jnl_Jump: prb_addStrSegment(&reincode, "jnl "); break;
+            case InstrKind_jnle_Jump: prb_addStrSegment(&reincode, "jnle "); break;
+            case InstrKind_jnb_Jump: prb_addStrSegment(&reincode, "jnb "); break;
+            case InstrKind_jnbe_Jump: prb_addStrSegment(&reincode, "jnbe "); break;
+            case InstrKind_jnp_Jump: prb_addStrSegment(&reincode, "jnp "); break;
+            case InstrKind_jno_Jump: prb_addStrSegment(&reincode, "jno "); break;
+            case InstrKind_jns_Jump: prb_addStrSegment(&reincode, "jns "); break;
+            case InstrKind_loop_Loop: prb_addStrSegment(&reincode, "loop "); break;
+            case InstrKind_loopz_Loop: prb_addStrSegment(&reincode, "loopz "); break;
+            case InstrKind_loopnz_Loop: prb_addStrSegment(&reincode, "loopnz "); break;
+            case InstrKind_jcxz_Jump: prb_addStrSegment(&reincode, "jcxz "); break;
         }
 
         addOpStr(&reincode, instr.op1);
-        prb_addStrSegment(&reincode, ", ");
-        addOpStr(&reincode, instr.op2);
+        if (instr.op2.kind != OpID_None) {
+            prb_addStrSegment(&reincode, ", ");
+            addOpStr(&reincode, instr.op2);
+        }
         prb_addStrSegment(&reincode, "\n");
     }
     Str reincodeAsm = prb_endStr(&reincode);
@@ -923,34 +1212,34 @@ main() {
             "cmp al, -30\n"
             "cmp al, 9\n"
 
-            // "test_label0:\n"
-            // "jnz test_label1\n"
-            // "jnz test_label0\n"
-            // "test_label1:\n"
-            // "jnz test_label0\n"
-            // "jnz test_label1\n"
+            "test_label0:\n"
+            "jnz test_label1\n"
+            "jnz test_label0\n"
+            "test_label1:\n"
+            "jnz test_label0\n"
+            "jnz test_label1\n"
 
-            // "label:\n"
-            // "je label\n"
-            // "jl label\n"
-            // "jle label\n"
-            // "jb label\n"
-            // "jbe label\n"
-            // "jp label\n"
-            // "jo label\n"
-            // "js label\n"
-            // "jne label\n"
-            // "jnl label\n"
-            // "jg label\n"
-            // "jnb label\n"
-            // "ja label\n"
-            // "jnp label\n"
-            // "jno label\n"
-            // "jns label\n"
-            // "loop label\n"
-            // "loopz label\n"
-            // "loopnz label\n"
-            // "jcxz label\n"
+            "label:\n"
+            "je label\n"
+            "jl label\n"
+            "jle label\n"
+            "jb label\n"
+            "jbe label\n"
+            "jp label\n"
+            "jo label\n"
+            "js label\n"
+            "jne label\n"
+            "jnl label\n"
+            "jg label\n"
+            "jnb label\n"
+            "ja label\n"
+            "jnp label\n"
+            "jno label\n"
+            "jns label\n"
+            "loop label\n"
+            "loopz label\n"
+            "loopnz label\n"
+            "jcxz label\n"
         )
     );
 

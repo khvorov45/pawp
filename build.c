@@ -145,6 +145,7 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
         Instr** cases = 0;
         i32     totalPossibleCases = 1 << minBitsInFirstLiteral;
         arrsetlen(cases, totalPossibleCases);
+        prb_memset(cases, 0, sizeof(*cases) * totalPossibleCases);
         for (i32 instrInd = 0; instrInd < arrlen(instrs); instrInd++) {
             Instr   instr = instrs[instrInd];
             BitDesc firstBit = instr.bytes[0].bits[0];
@@ -165,7 +166,7 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
             arrput(cases[switchLiteral], instr);
         }
 
-        for (u8 caseid = 0; caseid < arrlen(cases); caseid++) {
+        for (int caseid = 0; caseid < arrlen(cases); caseid++) {
             Instr* caseInstrs = cases[caseid];
             if (arrlen(caseInstrs) > 0) {
                 assert(arrlen(caseInstrs) < arrlen(instrs));
@@ -200,6 +201,7 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
         bool memoryToAccumulator = false;
         bool accumulatorToMemory = false;
         bool op1IsAccumulator = false;
+        bool relJump = false;
 
         for (i32 byteInd = 0; byteInd < arrlen(instr.bytes); byteInd++) {
             ByteDesc byte = instr.bytes[byteInd];
@@ -253,65 +255,82 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
             } else {
                 assert(arrlen(byte.bits) == 1);
                 BitDesc bit = byte.bits[0];
-                assert(bit.kind == BitDescKind_Named);
-                if (prb_streq(bit.name, STR("disp_lo"))) {
-                    addLine(gstr, indentLevel, "Operand rmOp = {};");
-                    addLine(gstr, indentLevel, "switch (mod) {");
 
-                    addLine(gstr, indentLevel + 1, "case 0b00: {");
-                    addLine(gstr, indentLevel + 1 + 1, "rmOp = (Operand) {.kind = OpID_Memory, .mem.id = r_m};");
-                    addLine(gstr, indentLevel + 1 + 1, "if (r_m == 0b110) {");
-                    addLine(gstr, indentLevel + 1 + 1 + 1, "rmOp.mem.direct = true;");
-                    addLine(gstr, indentLevel + 1 + 1 + 1, "rmOp.mem.disp = (((u16)input.data[offset + 1]) << 8) | ((u16)input.data[offset]);");
-                    addLine(gstr, indentLevel + 1 + 1 + 1, "offset += 2;");
-                    addLine(gstr, indentLevel + 1 + 1, "}");
-                    addLine(gstr, indentLevel + 1, "} break;");
+                switch (bit.kind) {
+                    case BitDescKind_Literal: {
+                        addIndent(gstr, indentLevel);
+                        prb_addStrSegment(gstr, "assert(input.data[offset] == 0b");
+                        assert(bit.bitCount == 8);
+                        addBinary(gstr, bit.literal, bit.bitCount);
+                        prb_addStrSegment(gstr, ");\n");
+                        addLine(gstr, indentLevel, "offset += 1;");
+                    } break;
 
-                    addLine(gstr, indentLevel + 1, "case 0b01: {");
-                    addLine(gstr, indentLevel + 1 + 1, "rmOp = (Operand) {.kind = OpID_Memory, .mem.id = r_m, .mem.disp = *((i8*)&input.data[offset])};");
-                    addLine(gstr, indentLevel + 1 + 1, "offset += 1;");
-                    addLine(gstr, indentLevel + 1, "} break;");
+                    case BitDescKind_Named: {
+                        if (prb_streq(bit.name, STR("disp_lo"))) {
+                            addLine(gstr, indentLevel, "Operand rmOp = {};");
+                            addLine(gstr, indentLevel, "switch (mod) {");
 
-                    addLine(gstr, indentLevel + 1, "case 0b10: {");
-                    addLine(gstr, indentLevel + 1 + 1, "rmOp = (Operand) {.kind = OpID_Memory, .mem.id = r_m, .mem.disp = (((u16)input.data[offset + 1]) << 8) | ((u16)input.data[offset])};");
-                    addLine(gstr, indentLevel + 1 + 1, "offset += 2;");
-                    addLine(gstr, indentLevel + 1, "} break;");
+                            addLine(gstr, indentLevel + 1, "case 0b00: {");
+                            addLine(gstr, indentLevel + 1 + 1, "rmOp = (Operand) {.kind = OpID_Memory, .mem.id = r_m};");
+                            addLine(gstr, indentLevel + 1 + 1, "if (r_m == 0b110) {");
+                            addLine(gstr, indentLevel + 1 + 1 + 1, "rmOp.mem.direct = true;");
+                            addLine(gstr, indentLevel + 1 + 1 + 1, "rmOp.mem.disp = (((u16)input.data[offset + 1]) << 8) | ((u16)input.data[offset]);");
+                            addLine(gstr, indentLevel + 1 + 1 + 1, "offset += 2;");
+                            addLine(gstr, indentLevel + 1 + 1, "}");
+                            addLine(gstr, indentLevel + 1, "} break;");
 
-                    addLine(gstr, indentLevel + 1, "case 0b11: {");
-                    addLine(gstr, indentLevel + 1 + 1, "rmOp = (Operand) {.kind = OpID_Register, .reg.id = w ? r_m : r_m %% 4, .reg.bytes = w ? 2 : 1, .reg.offset = w == 0 && r_m > 0b11};");
-                    addLine(gstr, indentLevel + 1, "} break;");
+                            addLine(gstr, indentLevel + 1, "case 0b01: {");
+                            addLine(gstr, indentLevel + 1 + 1, "rmOp = (Operand) {.kind = OpID_Memory, .mem.id = r_m, .mem.disp = *((i8*)&input.data[offset])};");
+                            addLine(gstr, indentLevel + 1 + 1, "offset += 1;");
+                            addLine(gstr, indentLevel + 1, "} break;");
 
-                    addLine(gstr, indentLevel, "}\n");
-                } else if (prb_streq(bit.name, STR("data_lo"))) {
-                    dataField = true;
-                    addLine(gstr, indentLevel, "u16 data = input.data[offset];");
-                    addLine(gstr, indentLevel, "offset += 1;");
-                    if (sField) {
-                        addLine(gstr, indentLevel, "if (w == 1 && s == 0) {");
-                    } else {
-                        addLine(gstr, indentLevel, "if (w == 1) {");
-                    }
-                    addLine(gstr, indentLevel + 1, "data = ((u16)input.data[offset] << 8) | data;");
-                    addLine(gstr, indentLevel + 1, "offset += 1;");
-                    addLine(gstr, indentLevel, "}\n");
-                } else if (prb_streq(bit.name, STR("addr_lo"))) {
-                    addLine(gstr, indentLevel, "u16 addr = input.data[offset];");
-                    addLine(gstr, indentLevel, "offset += 1;");
-                    addLine(gstr, indentLevel, "if (w == 1) {");
-                    addLine(gstr, indentLevel + 1, "addr = ((u16)input.data[offset] << 8) | addr;");
-                    addLine(gstr, indentLevel + 1, "offset += 1;");
-                    addLine(gstr, indentLevel, "}\n");
-                } else {
-                    assert(!"unrecognized");
-                }
+                            addLine(gstr, indentLevel + 1, "case 0b10: {");
+                            addLine(gstr, indentLevel + 1 + 1, "rmOp = (Operand) {.kind = OpID_Memory, .mem.id = r_m, .mem.disp = (((u16)input.data[offset + 1]) << 8) | ((u16)input.data[offset])};");
+                            addLine(gstr, indentLevel + 1 + 1, "offset += 2;");
+                            addLine(gstr, indentLevel + 1, "} break;");
 
-                if (prb_strEndsWith(bit.name, STR("_lo"))) {
-                    assert(byteInd < arrlen(instr.bytes) - 1);
-                    ByteDesc nextByte = instr.bytes[byteInd + 1];
-                    assert(arrlen(nextByte.bits) == 1);
-                    BitDesc nextByteBit = nextByte.bits[0];
-                    assert(nextByteBit.kind == BitDescKind_Named && prb_strEndsWith(nextByteBit.name, STR("_hi")));
-                    byteInd += 1;
+                            addLine(gstr, indentLevel + 1, "case 0b11: {");
+                            addLine(gstr, indentLevel + 1 + 1, "rmOp = (Operand) {.kind = OpID_Register, .reg.id = w ? r_m : r_m %% 4, .reg.bytes = w ? 2 : 1, .reg.offset = w == 0 && r_m > 0b11};");
+                            addLine(gstr, indentLevel + 1, "} break;");
+
+                            addLine(gstr, indentLevel, "}\n");
+                        } else if (prb_streq(bit.name, STR("data_lo"))) {
+                            dataField = true;
+                            addLine(gstr, indentLevel, "u16 data = input.data[offset];");
+                            addLine(gstr, indentLevel, "offset += 1;");
+                            if (sField) {
+                                addLine(gstr, indentLevel, "if (w == 1 && s == 0) {");
+                            } else {
+                                addLine(gstr, indentLevel, "if (w == 1) {");
+                            }
+                            addLine(gstr, indentLevel + 1, "data = ((u16)input.data[offset] << 8) | data;");
+                            addLine(gstr, indentLevel + 1, "offset += 1;");
+                            addLine(gstr, indentLevel, "}\n");
+                        } else if (prb_streq(bit.name, STR("addr_lo"))) {
+                            addLine(gstr, indentLevel, "u16 addr = input.data[offset];");
+                            addLine(gstr, indentLevel, "offset += 1;");
+                            addLine(gstr, indentLevel, "if (w == 1) {");
+                            addLine(gstr, indentLevel + 1, "addr = ((u16)input.data[offset] << 8) | addr;");
+                            addLine(gstr, indentLevel + 1, "offset += 1;");
+                            addLine(gstr, indentLevel, "}\n");
+                        } else if (prb_streq(bit.name, STR("ip_inc8"))) {
+                            relJump = true;
+                            addLine(gstr, indentLevel, "i16 relJump = *(i8*)(&input.data[offset]);");
+                            addLine(gstr, indentLevel, "offset += 1;");
+                        } else {
+                            assert(!"unrecognized");
+                        }
+
+                        if (prb_strEndsWith(bit.name, STR("_lo"))) {
+                            assert(byteInd < arrlen(instr.bytes) - 1);
+                            ByteDesc nextByte = instr.bytes[byteInd + 1];
+                            assert(arrlen(nextByte.bits) == 1);
+                            BitDesc nextByteBit = nextByte.bits[0];
+                            assert(nextByteBit.kind == BitDescKind_Named && prb_strEndsWith(nextByteBit.name, STR("_hi")));
+                            byteInd += 1;
+                        }
+                    } break;
                 }
             }
         }
@@ -340,6 +359,8 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
             addLine(gstr, indentLevel, "instr->op2 = (Operand) {.kind = OpID_Register, .reg.id = RegisterID_AX, .reg.bytes = w ? 2 : 1};");
         } else if (op1IsAccumulator) {
             addLine(gstr, indentLevel, "instr->op1 = (Operand) {.kind = OpID_Register, .reg.id = RegisterID_AX, .reg.bytes = w ? 2 : 1};");
+        } else if (relJump) {
+            addLine(gstr, indentLevel, "instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};");
         }
 
         if (dataField) {
