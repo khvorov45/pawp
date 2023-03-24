@@ -215,7 +215,7 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
                         assert(bit.kind == BitDescKind_Literal);
                         memoryToAccumulator = memoryToAccumulator || bit.literal == 0b1010000;
                         accumulatorToMemory = accumulatorToMemory || bit.literal == 0b1010001;
-                        op1IsAccumulator = op1IsAccumulator || bit.literal == 0b0000010 || bit.literal == 0b0010110;
+                        op1IsAccumulator = op1IsAccumulator || bit.literal == 0b0000010 || bit.literal == 0b0010110 || bit.literal == 0b0011110;
                     }
 
                     addIndent(gstr, indentLevel);
