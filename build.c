@@ -191,7 +191,7 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
     } else {
         Instr instr = instrs[0];
         addIndent(gstr, indentLevel);
-        prb_addStrSegment(gstr, "instr->kind = InstrKind_%.*s_%.*s;\n\n", LIT(instr.name), LIT(instr.desc));
+        prb_addStrSegment(gstr, "instr.kind = InstrKind_%.*s_%.*s;\n\n", LIT(instr.name), LIT(instr.desc));
         bool regField = false;
         bool rmField = false;
         bool dField = false;
@@ -341,30 +341,30 @@ codegen(prb_GrowingStr* gstr, Instr* instrs, i32 indentLevel) {
 
         if (regField && rmField) {
             addLine(gstr, indentLevel, "if (d) {");
-            addLine(gstr, indentLevel + 1, "instr->op1 = regOp;");
-            addLine(gstr, indentLevel + 1, "instr->op2 = rmOp;");
+            addLine(gstr, indentLevel + 1, "instr.op1 = regOp;");
+            addLine(gstr, indentLevel + 1, "instr.op2 = rmOp;");
             addLine(gstr, indentLevel, "} else {");
-            addLine(gstr, indentLevel + 1, "instr->op1 = rmOp;");
-            addLine(gstr, indentLevel + 1, "instr->op2 = regOp;");
+            addLine(gstr, indentLevel + 1, "instr.op1 = rmOp;");
+            addLine(gstr, indentLevel + 1, "instr.op2 = regOp;");
             addLine(gstr, indentLevel, "}");
         } else if (regField) {
-            addLine(gstr, indentLevel, "instr->op1 = regOp;");
+            addLine(gstr, indentLevel, "instr.op1 = regOp;");
         } else if (rmField) {
-            addLine(gstr, indentLevel, "instr->op1 = rmOp;");
+            addLine(gstr, indentLevel, "instr.op1 = rmOp;");
         } else if (memoryToAccumulator) {
-            addLine(gstr, indentLevel, "instr->op1 = (Operand) {.kind = OpID_Register, .reg.id = RegisterID_AX, .reg.bytes = w ? 2 : 1};");
-            addLine(gstr, indentLevel, "instr->op2 = (Operand) {.kind = OpID_Memory, .mem.direct = true, .mem.disp = addr};");
+            addLine(gstr, indentLevel, "instr.op1 = (Operand) {.kind = OpID_Register, .reg.id = RegisterID_AX, .reg.bytes = w ? 2 : 1};");
+            addLine(gstr, indentLevel, "instr.op2 = (Operand) {.kind = OpID_Memory, .mem.direct = true, .mem.disp = addr};");
         } else if (accumulatorToMemory) {
-            addLine(gstr, indentLevel, "instr->op1 = (Operand) {.kind = OpID_Memory, .mem.direct = true, .mem.disp = addr};");
-            addLine(gstr, indentLevel, "instr->op2 = (Operand) {.kind = OpID_Register, .reg.id = RegisterID_AX, .reg.bytes = w ? 2 : 1};");
+            addLine(gstr, indentLevel, "instr.op1 = (Operand) {.kind = OpID_Memory, .mem.direct = true, .mem.disp = addr};");
+            addLine(gstr, indentLevel, "instr.op2 = (Operand) {.kind = OpID_Register, .reg.id = RegisterID_AX, .reg.bytes = w ? 2 : 1};");
         } else if (op1IsAccumulator) {
-            addLine(gstr, indentLevel, "instr->op1 = (Operand) {.kind = OpID_Register, .reg.id = RegisterID_AX, .reg.bytes = w ? 2 : 1};");
+            addLine(gstr, indentLevel, "instr.op1 = (Operand) {.kind = OpID_Register, .reg.id = RegisterID_AX, .reg.bytes = w ? 2 : 1};");
         } else if (relJump) {
-            addLine(gstr, indentLevel, "instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};");
+            addLine(gstr, indentLevel, "instr.op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};");
         }
 
         if (dataField) {
-            addLine(gstr, indentLevel, "instr->op2 = (Operand) {.kind = OpID_Immediate, .immediate.val = data, .immediate.bytes = w ? 2 : 1};");
+            addLine(gstr, indentLevel, "instr.op2 = (Operand) {.kind = OpID_Immediate, .immediate.val = data, .immediate.bytes = w ? 2 : 1};");
         }
     }
 }
@@ -551,7 +551,7 @@ main() {
     // NOTE(khvorov) Compile and run the main file
     {
         Str hmout = prb_replaceExt(arena, hmpath, STR("exe"));
-        execCmd(arena, prb_fmt(arena, "clang -g -Wall -Wextra %.*s -o %.*s", LIT(hmpath), LIT(hmout)));
+        execCmd(arena, prb_fmt(arena, "clang -g -Wall -Wextra -Wno-missing-field-initializers %.*s -o %.*s", LIT(hmpath), LIT(hmout)));
         execCmd(arena, hmout);
     }
 

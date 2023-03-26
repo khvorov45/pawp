@@ -74,6 +74,7 @@ typedef enum RegisterID {
     RegisterID_BP,
     RegisterID_SI,
     RegisterID_DI,
+    RegisterID_Count,
 } RegisterID;
 
 typedef enum FormulaID {
@@ -122,22 +123,21 @@ typedef struct Instr {
     Operand   op2;
 } Instr;
 
-typedef struct InstrArray {
-    Instr* ptr;
-    isize  len;
-} InstrArray;
+typedef struct InstrIter {
+    prb_Bytes input;
+    i32       offset;
+    Instr     instr;
+} InstrIter;
 
-function InstrArray
-decode(Arena* arena, prb_Bytes input) {
-    // NOTE(khvorov) This arena won't be allocating anything other than instructions here
-    prb_arenaAlignFreePtr(arena, alignof(Instr));
-    Instr* instrs = prb_arenaFreePtr(arena);
+function bool
+instrIterNext(InstrIter* iter) {
+    bool result = false;
+    if (iter->offset < iter->input.len) {
+        result = true;
 
-    i32 instrCount = 0;
-    i32 offset = 0;
-    while (offset < input.len) {
-        Instr* instr = prb_arenaAllocStruct(arena, Instr);
-        instrCount += 1;
+        i32       offset = iter->offset;
+        Instr     instr = {};
+        prb_Bytes input = iter->input;
 
         // clang-format off
         // @codegen
@@ -150,7 +150,7 @@ decode(Arena* arena, prb_Bytes input) {
 
                     // add(RegisterMemory_With_Register_To_Either)
                     case 0b000000: {
-                        instr->kind = InstrKind_add_RegisterMemory_With_Register_To_Either;
+                        instr.kind = InstrKind_add_RegisterMemory_With_Register_To_Either;
 
                         u8 byte0bit0_literal = (input.data[offset] >> 2) & 0b00111111;
                         assert(byte0bit0_literal == 0b000000);
@@ -189,17 +189,17 @@ decode(Arena* arena, prb_Bytes input) {
                         Operand regOp = {.kind = OpID_Register, .reg.id = w ? reg : reg % 4, .reg.bytes = w ? 2 : 1, .reg.offset = w == 0 && reg > 0b11};
 
                         if (d) {
-                            instr->op1 = regOp;
-                            instr->op2 = rmOp;
+                            instr.op1 = regOp;
+                            instr.op2 = rmOp;
                         } else {
-                            instr->op1 = rmOp;
-                            instr->op2 = regOp;
+                            instr.op1 = rmOp;
+                            instr.op2 = regOp;
                         }
                     } break;
 
                     // add(Immediate_To_Accumulator)
                     case 0b000001: {
-                        instr->kind = InstrKind_add_Immediate_To_Accumulator;
+                        instr.kind = InstrKind_add_Immediate_To_Accumulator;
 
                         u8 byte0bit0_literal = (input.data[offset] >> 1) & 0b01111111;
                         assert(byte0bit0_literal == 0b0000010);
@@ -213,8 +213,8 @@ decode(Arena* arena, prb_Bytes input) {
                             offset += 1;
                         }
 
-                        instr->op1 = (Operand) {.kind = OpID_Register, .reg.id = RegisterID_AX, .reg.bytes = w ? 2 : 1};
-                        instr->op2 = (Operand) {.kind = OpID_Immediate, .immediate.val = data, .immediate.bytes = w ? 2 : 1};
+                        instr.op1 = (Operand) {.kind = OpID_Register, .reg.id = RegisterID_AX, .reg.bytes = w ? 2 : 1};
+                        instr.op2 = (Operand) {.kind = OpID_Immediate, .immediate.val = data, .immediate.bytes = w ? 2 : 1};
                     } break;
                 
                     default: assert(!"unimplemented"); break;
@@ -227,7 +227,7 @@ decode(Arena* arena, prb_Bytes input) {
 
                     // sub(RegisterMemory_With_Register_To_Either)
                     case 0b001010: {
-                        instr->kind = InstrKind_sub_RegisterMemory_With_Register_To_Either;
+                        instr.kind = InstrKind_sub_RegisterMemory_With_Register_To_Either;
 
                         u8 byte0bit0_literal = (input.data[offset] >> 2) & 0b00111111;
                         assert(byte0bit0_literal == 0b001010);
@@ -266,17 +266,17 @@ decode(Arena* arena, prb_Bytes input) {
                         Operand regOp = {.kind = OpID_Register, .reg.id = w ? reg : reg % 4, .reg.bytes = w ? 2 : 1, .reg.offset = w == 0 && reg > 0b11};
 
                         if (d) {
-                            instr->op1 = regOp;
-                            instr->op2 = rmOp;
+                            instr.op1 = regOp;
+                            instr.op2 = rmOp;
                         } else {
-                            instr->op1 = rmOp;
-                            instr->op2 = regOp;
+                            instr.op1 = rmOp;
+                            instr.op2 = regOp;
                         }
                     } break;
 
                     // sub(Immediate_From_Accumulator)
                     case 0b001011: {
-                        instr->kind = InstrKind_sub_Immediate_From_Accumulator;
+                        instr.kind = InstrKind_sub_Immediate_From_Accumulator;
 
                         u8 byte0bit0_literal = (input.data[offset] >> 1) & 0b01111111;
                         assert(byte0bit0_literal == 0b0010110);
@@ -290,8 +290,8 @@ decode(Arena* arena, prb_Bytes input) {
                             offset += 1;
                         }
 
-                        instr->op1 = (Operand) {.kind = OpID_Register, .reg.id = RegisterID_AX, .reg.bytes = w ? 2 : 1};
-                        instr->op2 = (Operand) {.kind = OpID_Immediate, .immediate.val = data, .immediate.bytes = w ? 2 : 1};
+                        instr.op1 = (Operand) {.kind = OpID_Register, .reg.id = RegisterID_AX, .reg.bytes = w ? 2 : 1};
+                        instr.op2 = (Operand) {.kind = OpID_Immediate, .immediate.val = data, .immediate.bytes = w ? 2 : 1};
                     } break;
                 
                     default: assert(!"unimplemented"); break;
@@ -304,7 +304,7 @@ decode(Arena* arena, prb_Bytes input) {
 
                     // cmp(RegisterMemory_And_Register)
                     case 0b001110: {
-                        instr->kind = InstrKind_cmp_RegisterMemory_And_Register;
+                        instr.kind = InstrKind_cmp_RegisterMemory_And_Register;
 
                         u8 byte0bit0_literal = (input.data[offset] >> 2) & 0b00111111;
                         assert(byte0bit0_literal == 0b001110);
@@ -343,17 +343,17 @@ decode(Arena* arena, prb_Bytes input) {
                         Operand regOp = {.kind = OpID_Register, .reg.id = w ? reg : reg % 4, .reg.bytes = w ? 2 : 1, .reg.offset = w == 0 && reg > 0b11};
 
                         if (d) {
-                            instr->op1 = regOp;
-                            instr->op2 = rmOp;
+                            instr.op1 = regOp;
+                            instr.op2 = rmOp;
                         } else {
-                            instr->op1 = rmOp;
-                            instr->op2 = regOp;
+                            instr.op1 = rmOp;
+                            instr.op2 = regOp;
                         }
                     } break;
 
                     // cmp(Immediate_With_Accumulator)
                     case 0b001111: {
-                        instr->kind = InstrKind_cmp_Immediate_With_Accumulator;
+                        instr.kind = InstrKind_cmp_Immediate_With_Accumulator;
 
                         u8 byte0bit0_literal = (input.data[offset] >> 1) & 0b01111111;
                         assert(byte0bit0_literal == 0b0011110);
@@ -367,8 +367,8 @@ decode(Arena* arena, prb_Bytes input) {
                             offset += 1;
                         }
 
-                        instr->op1 = (Operand) {.kind = OpID_Register, .reg.id = RegisterID_AX, .reg.bytes = w ? 2 : 1};
-                        instr->op2 = (Operand) {.kind = OpID_Immediate, .immediate.val = data, .immediate.bytes = w ? 2 : 1};
+                        instr.op1 = (Operand) {.kind = OpID_Register, .reg.id = RegisterID_AX, .reg.bytes = w ? 2 : 1};
+                        instr.op2 = (Operand) {.kind = OpID_Immediate, .immediate.val = data, .immediate.bytes = w ? 2 : 1};
                     } break;
                 
                     default: assert(!"unimplemented"); break;
@@ -381,178 +381,178 @@ decode(Arena* arena, prb_Bytes input) {
 
                     // jo(Jump)
                     case 0b01110000: {
-                        instr->kind = InstrKind_jo_Jump;
+                        instr.kind = InstrKind_jo_Jump;
 
                         assert(input.data[offset] == 0b01110000);
                         offset += 1;
                         i16 relJump = *(i8*)(&input.data[offset]);
                         offset += 1;
-                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                        instr.op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
                     } break;
 
                     // jno(Jump)
                     case 0b01110001: {
-                        instr->kind = InstrKind_jno_Jump;
+                        instr.kind = InstrKind_jno_Jump;
 
                         assert(input.data[offset] == 0b01110001);
                         offset += 1;
                         i16 relJump = *(i8*)(&input.data[offset]);
                         offset += 1;
-                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                        instr.op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
                     } break;
 
                     // jb(Jump)
                     case 0b01110010: {
-                        instr->kind = InstrKind_jb_Jump;
+                        instr.kind = InstrKind_jb_Jump;
 
                         assert(input.data[offset] == 0b01110010);
                         offset += 1;
                         i16 relJump = *(i8*)(&input.data[offset]);
                         offset += 1;
-                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                        instr.op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
                     } break;
 
                     // jnb(Jump)
                     case 0b01110011: {
-                        instr->kind = InstrKind_jnb_Jump;
+                        instr.kind = InstrKind_jnb_Jump;
 
                         assert(input.data[offset] == 0b01110011);
                         offset += 1;
                         i16 relJump = *(i8*)(&input.data[offset]);
                         offset += 1;
-                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                        instr.op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
                     } break;
 
                     // je(Jump)
                     case 0b01110100: {
-                        instr->kind = InstrKind_je_Jump;
+                        instr.kind = InstrKind_je_Jump;
 
                         assert(input.data[offset] == 0b01110100);
                         offset += 1;
                         i16 relJump = *(i8*)(&input.data[offset]);
                         offset += 1;
-                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                        instr.op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
                     } break;
 
                     // jne(Jump)
                     case 0b01110101: {
-                        instr->kind = InstrKind_jne_Jump;
+                        instr.kind = InstrKind_jne_Jump;
 
                         assert(input.data[offset] == 0b01110101);
                         offset += 1;
                         i16 relJump = *(i8*)(&input.data[offset]);
                         offset += 1;
-                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                        instr.op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
                     } break;
 
                     // jbe(Jump)
                     case 0b01110110: {
-                        instr->kind = InstrKind_jbe_Jump;
+                        instr.kind = InstrKind_jbe_Jump;
 
                         assert(input.data[offset] == 0b01110110);
                         offset += 1;
                         i16 relJump = *(i8*)(&input.data[offset]);
                         offset += 1;
-                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                        instr.op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
                     } break;
 
                     // jnbe(Jump)
                     case 0b01110111: {
-                        instr->kind = InstrKind_jnbe_Jump;
+                        instr.kind = InstrKind_jnbe_Jump;
 
                         assert(input.data[offset] == 0b01110111);
                         offset += 1;
                         i16 relJump = *(i8*)(&input.data[offset]);
                         offset += 1;
-                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                        instr.op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
                     } break;
 
                     // js(Jump)
                     case 0b01111000: {
-                        instr->kind = InstrKind_js_Jump;
+                        instr.kind = InstrKind_js_Jump;
 
                         assert(input.data[offset] == 0b01111000);
                         offset += 1;
                         i16 relJump = *(i8*)(&input.data[offset]);
                         offset += 1;
-                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                        instr.op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
                     } break;
 
                     // jns(Jump)
                     case 0b01111001: {
-                        instr->kind = InstrKind_jns_Jump;
+                        instr.kind = InstrKind_jns_Jump;
 
                         assert(input.data[offset] == 0b01111001);
                         offset += 1;
                         i16 relJump = *(i8*)(&input.data[offset]);
                         offset += 1;
-                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                        instr.op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
                     } break;
 
                     // jp(Jump)
                     case 0b01111010: {
-                        instr->kind = InstrKind_jp_Jump;
+                        instr.kind = InstrKind_jp_Jump;
 
                         assert(input.data[offset] == 0b01111010);
                         offset += 1;
                         i16 relJump = *(i8*)(&input.data[offset]);
                         offset += 1;
-                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                        instr.op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
                     } break;
 
                     // jnp(Jump)
                     case 0b01111011: {
-                        instr->kind = InstrKind_jnp_Jump;
+                        instr.kind = InstrKind_jnp_Jump;
 
                         assert(input.data[offset] == 0b01111011);
                         offset += 1;
                         i16 relJump = *(i8*)(&input.data[offset]);
                         offset += 1;
-                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                        instr.op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
                     } break;
 
                     // jl(Jump)
                     case 0b01111100: {
-                        instr->kind = InstrKind_jl_Jump;
+                        instr.kind = InstrKind_jl_Jump;
 
                         assert(input.data[offset] == 0b01111100);
                         offset += 1;
                         i16 relJump = *(i8*)(&input.data[offset]);
                         offset += 1;
-                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                        instr.op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
                     } break;
 
                     // jnl(Jump)
                     case 0b01111101: {
-                        instr->kind = InstrKind_jnl_Jump;
+                        instr.kind = InstrKind_jnl_Jump;
 
                         assert(input.data[offset] == 0b01111101);
                         offset += 1;
                         i16 relJump = *(i8*)(&input.data[offset]);
                         offset += 1;
-                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                        instr.op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
                     } break;
 
                     // jle(Jump)
                     case 0b01111110: {
-                        instr->kind = InstrKind_jle_Jump;
+                        instr.kind = InstrKind_jle_Jump;
 
                         assert(input.data[offset] == 0b01111110);
                         offset += 1;
                         i16 relJump = *(i8*)(&input.data[offset]);
                         offset += 1;
-                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                        instr.op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
                     } break;
 
                     // jnle(Jump)
                     case 0b01111111: {
-                        instr->kind = InstrKind_jnle_Jump;
+                        instr.kind = InstrKind_jnle_Jump;
 
                         assert(input.data[offset] == 0b01111111);
                         offset += 1;
                         i16 relJump = *(i8*)(&input.data[offset]);
                         offset += 1;
-                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                        instr.op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
                     } break;
                 
                     default: assert(!"unimplemented"); break;
@@ -569,7 +569,7 @@ decode(Arena* arena, prb_Bytes input) {
 
                             // add(Immediate_To_RegisterMemory)
                             case 0b000: {
-                                instr->kind = InstrKind_add_Immediate_To_RegisterMemory;
+                                instr.kind = InstrKind_add_Immediate_To_RegisterMemory;
 
                                 u8 byte0bit0_literal = (input.data[offset] >> 2) & 0b00111111;
                                 assert(byte0bit0_literal == 0b100000);
@@ -613,13 +613,13 @@ decode(Arena* arena, prb_Bytes input) {
                                     offset += 1;
                                 }
 
-                                instr->op1 = rmOp;
-                                instr->op2 = (Operand) {.kind = OpID_Immediate, .immediate.val = data, .immediate.bytes = w ? 2 : 1};
+                                instr.op1 = rmOp;
+                                instr.op2 = (Operand) {.kind = OpID_Immediate, .immediate.val = data, .immediate.bytes = w ? 2 : 1};
                             } break;
 
                             // sub(Immediate_From_RegisterMemory)
                             case 0b101: {
-                                instr->kind = InstrKind_sub_Immediate_From_RegisterMemory;
+                                instr.kind = InstrKind_sub_Immediate_From_RegisterMemory;
 
                                 u8 byte0bit0_literal = (input.data[offset] >> 2) & 0b00111111;
                                 assert(byte0bit0_literal == 0b100000);
@@ -663,13 +663,13 @@ decode(Arena* arena, prb_Bytes input) {
                                     offset += 1;
                                 }
 
-                                instr->op1 = rmOp;
-                                instr->op2 = (Operand) {.kind = OpID_Immediate, .immediate.val = data, .immediate.bytes = w ? 2 : 1};
+                                instr.op1 = rmOp;
+                                instr.op2 = (Operand) {.kind = OpID_Immediate, .immediate.val = data, .immediate.bytes = w ? 2 : 1};
                             } break;
 
                             // cmp(Immediate_With_RegisterMemory)
                             case 0b111: {
-                                instr->kind = InstrKind_cmp_Immediate_With_RegisterMemory;
+                                instr.kind = InstrKind_cmp_Immediate_With_RegisterMemory;
 
                                 u8 byte0bit0_literal = (input.data[offset] >> 2) & 0b00111111;
                                 assert(byte0bit0_literal == 0b100000);
@@ -713,8 +713,8 @@ decode(Arena* arena, prb_Bytes input) {
                                     offset += 1;
                                 }
 
-                                instr->op1 = rmOp;
-                                instr->op2 = (Operand) {.kind = OpID_Immediate, .immediate.val = data, .immediate.bytes = w ? 2 : 1};
+                                instr.op1 = rmOp;
+                                instr.op2 = (Operand) {.kind = OpID_Immediate, .immediate.val = data, .immediate.bytes = w ? 2 : 1};
                             } break;
                         
                             default: assert(!"unimplemented"); break;
@@ -723,7 +723,7 @@ decode(Arena* arena, prb_Bytes input) {
 
                     // mov(RegisterMemory_ToFrom_Register)
                     case 0b100010: {
-                        instr->kind = InstrKind_mov_RegisterMemory_ToFrom_Register;
+                        instr.kind = InstrKind_mov_RegisterMemory_ToFrom_Register;
 
                         u8 byte0bit0_literal = (input.data[offset] >> 2) & 0b00111111;
                         assert(byte0bit0_literal == 0b100010);
@@ -762,11 +762,11 @@ decode(Arena* arena, prb_Bytes input) {
                         Operand regOp = {.kind = OpID_Register, .reg.id = w ? reg : reg % 4, .reg.bytes = w ? 2 : 1, .reg.offset = w == 0 && reg > 0b11};
 
                         if (d) {
-                            instr->op1 = regOp;
-                            instr->op2 = rmOp;
+                            instr.op1 = regOp;
+                            instr.op2 = rmOp;
                         } else {
-                            instr->op1 = rmOp;
-                            instr->op2 = regOp;
+                            instr.op1 = rmOp;
+                            instr.op2 = regOp;
                         }
                     } break;
                 
@@ -780,7 +780,7 @@ decode(Arena* arena, prb_Bytes input) {
 
                     // mov(Memory_To_Accumulator)
                     case 0b1010000: {
-                        instr->kind = InstrKind_mov_Memory_To_Accumulator;
+                        instr.kind = InstrKind_mov_Memory_To_Accumulator;
 
                         u8 byte0bit0_literal = (input.data[offset] >> 1) & 0b01111111;
                         assert(byte0bit0_literal == 0b1010000);
@@ -794,13 +794,13 @@ decode(Arena* arena, prb_Bytes input) {
                             offset += 1;
                         }
 
-                        instr->op1 = (Operand) {.kind = OpID_Register, .reg.id = RegisterID_AX, .reg.bytes = w ? 2 : 1};
-                        instr->op2 = (Operand) {.kind = OpID_Memory, .mem.direct = true, .mem.disp = addr};
+                        instr.op1 = (Operand) {.kind = OpID_Register, .reg.id = RegisterID_AX, .reg.bytes = w ? 2 : 1};
+                        instr.op2 = (Operand) {.kind = OpID_Memory, .mem.direct = true, .mem.disp = addr};
                     } break;
 
                     // mov(Accumulator_To_Memory)
                     case 0b1010001: {
-                        instr->kind = InstrKind_mov_Accumulator_To_Memory;
+                        instr.kind = InstrKind_mov_Accumulator_To_Memory;
 
                         u8 byte0bit0_literal = (input.data[offset] >> 1) & 0b01111111;
                         assert(byte0bit0_literal == 0b1010001);
@@ -814,8 +814,8 @@ decode(Arena* arena, prb_Bytes input) {
                             offset += 1;
                         }
 
-                        instr->op1 = (Operand) {.kind = OpID_Memory, .mem.direct = true, .mem.disp = addr};
-                        instr->op2 = (Operand) {.kind = OpID_Register, .reg.id = RegisterID_AX, .reg.bytes = w ? 2 : 1};
+                        instr.op1 = (Operand) {.kind = OpID_Memory, .mem.direct = true, .mem.disp = addr};
+                        instr.op2 = (Operand) {.kind = OpID_Register, .reg.id = RegisterID_AX, .reg.bytes = w ? 2 : 1};
                     } break;
                 
                     default: assert(!"unimplemented"); break;
@@ -824,7 +824,7 @@ decode(Arena* arena, prb_Bytes input) {
 
             // mov(Immediate_To_Register)
             case 0b1011: {
-                instr->kind = InstrKind_mov_Immediate_To_Register;
+                instr.kind = InstrKind_mov_Immediate_To_Register;
 
                 u8 byte0bit0_literal = (input.data[offset] >> 4) & 0b00001111;
                 assert(byte0bit0_literal == 0b1011);
@@ -841,13 +841,13 @@ decode(Arena* arena, prb_Bytes input) {
 
                 Operand regOp = {.kind = OpID_Register, .reg.id = w ? reg : reg % 4, .reg.bytes = w ? 2 : 1, .reg.offset = w == 0 && reg > 0b11};
 
-                instr->op1 = regOp;
-                instr->op2 = (Operand) {.kind = OpID_Immediate, .immediate.val = data, .immediate.bytes = w ? 2 : 1};
+                instr.op1 = regOp;
+                instr.op2 = (Operand) {.kind = OpID_Immediate, .immediate.val = data, .immediate.bytes = w ? 2 : 1};
             } break;
 
             // mov(Immediate_To_RegisterMemory)
             case 0b1100: {
-                instr->kind = InstrKind_mov_Immediate_To_RegisterMemory;
+                instr.kind = InstrKind_mov_Immediate_To_RegisterMemory;
 
                 u8 byte0bit0_literal = (input.data[offset] >> 1) & 0b01111111;
                 assert(byte0bit0_literal == 0b1100011);
@@ -890,8 +890,8 @@ decode(Arena* arena, prb_Bytes input) {
                     offset += 1;
                 }
 
-                instr->op1 = rmOp;
-                instr->op2 = (Operand) {.kind = OpID_Immediate, .immediate.val = data, .immediate.bytes = w ? 2 : 1};
+                instr.op1 = rmOp;
+                instr.op2 = (Operand) {.kind = OpID_Immediate, .immediate.val = data, .immediate.bytes = w ? 2 : 1};
             } break;
 
             case 0b1110: {
@@ -900,46 +900,46 @@ decode(Arena* arena, prb_Bytes input) {
 
                     // loopnz(Loop)
                     case 0b11100000: {
-                        instr->kind = InstrKind_loopnz_Loop;
+                        instr.kind = InstrKind_loopnz_Loop;
 
                         assert(input.data[offset] == 0b11100000);
                         offset += 1;
                         i16 relJump = *(i8*)(&input.data[offset]);
                         offset += 1;
-                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                        instr.op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
                     } break;
 
                     // loopz(Loop)
                     case 0b11100001: {
-                        instr->kind = InstrKind_loopz_Loop;
+                        instr.kind = InstrKind_loopz_Loop;
 
                         assert(input.data[offset] == 0b11100001);
                         offset += 1;
                         i16 relJump = *(i8*)(&input.data[offset]);
                         offset += 1;
-                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                        instr.op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
                     } break;
 
                     // loop(Loop)
                     case 0b11100010: {
-                        instr->kind = InstrKind_loop_Loop;
+                        instr.kind = InstrKind_loop_Loop;
 
                         assert(input.data[offset] == 0b11100010);
                         offset += 1;
                         i16 relJump = *(i8*)(&input.data[offset]);
                         offset += 1;
-                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                        instr.op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
                     } break;
 
                     // jcxz(Jump)
                     case 0b11100011: {
-                        instr->kind = InstrKind_jcxz_Jump;
+                        instr.kind = InstrKind_jcxz_Jump;
 
                         assert(input.data[offset] == 0b11100011);
                         offset += 1;
                         i16 relJump = *(i8*)(&input.data[offset]);
                         offset += 1;
-                        instr->op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
+                        instr.op1 = (Operand) {.kind = OpID_RelJump, .relJump = relJump};
                     } break;
                 
                     default: assert(!"unimplemented"); break;
@@ -952,6 +952,30 @@ decode(Arena* arena, prb_Bytes input) {
         // clang-format on
 
         assert(offset <= input.len);
+
+        iter->offset = offset;
+        iter->instr = instr;
+    }
+    return result;
+}
+
+typedef struct InstrArray {
+    Instr* ptr;
+    isize  len;
+} InstrArray;
+
+function InstrArray
+decodeToArray(Arena* arena, prb_Bytes input) {
+    // NOTE(khvorov) This arena won't be allocating anything other than instructions here
+    prb_arenaAlignFreePtr(arena, alignof(Instr));
+    Instr* instrs = prb_arenaFreePtr(arena);
+
+    i32       instrCount = 0;
+    InstrIter iter = {input};
+    while (instrIterNext(&iter)) {
+        Instr* instr = prb_arenaAllocStruct(arena, Instr);
+        instrCount += 1;
+        *instr = iter.instr;
     }
 
     InstrArray result = {instrs, instrCount};
@@ -1001,7 +1025,7 @@ addOpStr(prb_GrowingStr* gstr, Operand op) {
     }
 }
 
-function void
+function prb_Bytes
 test_decode(Arena* arena, Str input) {
     Str rootDir = prb_getParentDir(arena, STR(__FILE__));
     Str inputAsm = prb_pathJoin(arena, rootDir, STR("input.asm"));
@@ -1013,7 +1037,7 @@ test_decode(Arena* arena, Str input) {
     execCmd(arena, prb_fmt(arena, "nasm %.*s -o %.*s", LIT(inputAsm), LIT(inputBin)));
     prb_Bytes ref = readFile(arena, inputBin);
 
-    InstrArray decodedArray = decode(arena, ref);
+    InstrArray decodedArray = decodeToArray(arena, ref);
 
     prb_GrowingStr reincode = prb_beginStr(arena);
     prb_addStrSegment(&reincode, "bits 16\n");
@@ -1082,6 +1106,96 @@ test_decode(Arena* arena, Str input) {
     prb_Bytes mine = readFile(arena, decodeBin);
     assert(ref.len == mine.len);
     assert(prb_memeq(ref.data, mine.data, ref.len));
+
+    return ref;
+}
+
+typedef struct CPU {
+    u16 regs[RegisterID_Count];
+} CPU;
+
+function void
+test_execute(Arena* arena, Str input, CPU expected) {
+    prb_Bytes inputBytes = test_decode(arena, input);
+
+    CPU cpu = {};
+
+    InstrIter instrIter = {inputBytes};
+    while (instrIterNext(&instrIter)) {
+        Instr instr = instrIter.instr;
+
+        switch (instr.kind) {
+            case InstrKind_mov_Immediate_To_Register: {
+                assert(instr.op1.kind == OpID_Register);
+                assert(instr.op2.kind == OpID_Immediate);
+
+                assert(instr.op1.reg.offset == 0);
+                assert(instr.op1.reg.bytes == 2);
+
+                cpu.regs[instr.op1.reg.id] = instr.op2.immediate.val;
+            } break;
+
+            case InstrKind_mov_RegisterMemory_ToFrom_Register: {
+                assert(instr.op1.kind == OpID_Register);
+                assert(instr.op2.kind == OpID_Register);
+
+                assert(instr.op1.reg.offset == 0);
+                assert(instr.op1.reg.bytes == 2);
+
+                assert(instr.op2.reg.offset == 0);
+                assert(instr.op2.reg.bytes == 2);
+
+                cpu.regs[instr.op1.reg.id] = cpu.regs[instr.op2.reg.id];
+            } break;
+
+            case InstrKind_mov_Immediate_To_RegisterMemory:
+            case InstrKind_mov_Memory_To_Accumulator:
+            case InstrKind_mov_Accumulator_To_Memory: {
+                assert(!"unimplemented");
+            } break;
+
+            case InstrKind_add_RegisterMemory_With_Register_To_Either:
+            case InstrKind_add_Immediate_To_RegisterMemory:
+            case InstrKind_add_Immediate_To_Accumulator: {
+                assert(!"unimplemented");
+            } break;
+
+            case InstrKind_sub_RegisterMemory_With_Register_To_Either:
+            case InstrKind_sub_Immediate_From_RegisterMemory:
+            case InstrKind_sub_Immediate_From_Accumulator: {
+                assert(!"unimplemented");
+            } break;
+
+            case InstrKind_cmp_RegisterMemory_And_Register:
+            case InstrKind_cmp_Immediate_With_RegisterMemory:
+            case InstrKind_cmp_Immediate_With_Accumulator: {
+                assert(!"unimplemented");
+            } break;
+
+            case InstrKind_je_Jump: assert(!"unimplemented"); break;
+            case InstrKind_jl_Jump: assert(!"unimplemented"); break;
+            case InstrKind_jle_Jump: assert(!"unimplemented"); break;
+            case InstrKind_jb_Jump: assert(!"unimplemented"); break;
+            case InstrKind_jbe_Jump: assert(!"unimplemented"); break;
+            case InstrKind_jp_Jump: assert(!"unimplemented"); break;
+            case InstrKind_jo_Jump: assert(!"unimplemented"); break;
+            case InstrKind_js_Jump: assert(!"unimplemented"); break;
+            case InstrKind_jne_Jump: assert(!"unimplemented"); break;
+            case InstrKind_jnl_Jump: assert(!"unimplemented"); break;
+            case InstrKind_jnle_Jump: assert(!"unimplemented"); break;
+            case InstrKind_jnb_Jump: assert(!"unimplemented"); break;
+            case InstrKind_jnbe_Jump: assert(!"unimplemented"); break;
+            case InstrKind_jnp_Jump: assert(!"unimplemented"); break;
+            case InstrKind_jno_Jump: assert(!"unimplemented"); break;
+            case InstrKind_jns_Jump: assert(!"unimplemented"); break;
+            case InstrKind_loop_Loop: assert(!"unimplemented"); break;
+            case InstrKind_loopz_Loop: assert(!"unimplemented"); break;
+            case InstrKind_loopnz_Loop: assert(!"unimplemented"); break;
+            case InstrKind_jcxz_Jump: assert(!"unimplemented"); break;
+        }
+    }
+
+    assert(prb_memeq(&cpu, &expected, sizeof(cpu)));
 }
 
 int
@@ -1241,6 +1355,29 @@ main() {
             "loopnz label\n"
             "jcxz label\n"
         )
+    );
+
+    test_execute(
+        arena,
+        STR(
+            "bits 16\n"
+
+            "mov ax, 1\n"
+            "mov bx, 2\n"
+            "mov cx, 3\n"
+            "mov dx, 4\n"
+
+            "mov sp, ax\n"
+            "mov bp, bx\n"
+            "mov si, cx\n"
+            "mov di, dx\n"
+
+            "mov dx, sp\n"
+            "mov cx, bp\n"
+            "mov bx, si\n"
+            "mov ax, di\n"
+        ),
+        (CPU) {.regs = {4, 2, 1, 3, 1, 2, 3, 4}}
     );
 
     return 0;
