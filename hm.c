@@ -1112,6 +1112,7 @@ test_decode(Arena* arena, Str input) {
 
 typedef struct CPU {
     u16  regs[RegisterID_Count];
+    i32  ip;
     bool zero;
     bool sign;
 } CPU;
@@ -1125,6 +1126,7 @@ test_execute(Arena* arena, Str input, CPU expected) {
     InstrIter instrIter = {inputBytes};
     while (instrIterNext(&instrIter)) {
         Instr instr = instrIter.instr;
+        cpu.ip = instrIter.offset;
 
         switch (instr.kind) {
             case InstrKind_mov_Immediate_To_Register: {
@@ -1219,6 +1221,13 @@ test_execute(Arena* arena, Str input, CPU expected) {
                 assert(!"unimplemented");
             } break;
 
+            case InstrKind_jne_Jump: {
+                assert(instr.op1.kind == OpID_RelJump);
+                if (!cpu.zero) {
+                    cpu.ip += instr.op1.relJump;
+                }
+            } break;
+
             case InstrKind_je_Jump: assert(!"unimplemented"); break;
             case InstrKind_jl_Jump: assert(!"unimplemented"); break;
             case InstrKind_jle_Jump: assert(!"unimplemented"); break;
@@ -1227,7 +1236,6 @@ test_execute(Arena* arena, Str input, CPU expected) {
             case InstrKind_jp_Jump: assert(!"unimplemented"); break;
             case InstrKind_jo_Jump: assert(!"unimplemented"); break;
             case InstrKind_js_Jump: assert(!"unimplemented"); break;
-            case InstrKind_jne_Jump: assert(!"unimplemented"); break;
             case InstrKind_jnl_Jump: assert(!"unimplemented"); break;
             case InstrKind_jnle_Jump: assert(!"unimplemented"); break;
             case InstrKind_jnb_Jump: assert(!"unimplemented"); break;
@@ -1240,6 +1248,8 @@ test_execute(Arena* arena, Str input, CPU expected) {
             case InstrKind_loopnz_Loop: assert(!"unimplemented"); break;
             case InstrKind_jcxz_Jump: assert(!"unimplemented"); break;
         }
+
+        instrIter.offset = cpu.ip;
     }
 
     assert(prb_memeq(&cpu, &expected, sizeof(cpu)));
@@ -1424,7 +1434,7 @@ main() {
             "mov bx, si\n"
             "mov ax, di\n"
         ),
-        (CPU) {.regs = {4, 2, 1, 3, 1, 2, 3, 4}}
+        (CPU) {.regs = {4, 2, 1, 3, 1, 2, 3, 4}, .ip = 28}
     );
 
     test_execute(
@@ -1443,8 +1453,23 @@ main() {
             "add bp, 1027\n"
             "sub bp, 2026\n"
         ),
-        (CPU) {.regs = {0, 3841, 0, -4093 - 3841, 998, 999 + 1027 - 2026, 0, 0}, .sign = false, .zero = true}
+        (CPU) {.regs = {0, 3841, 0, -4093 - 3841, 998, 999 + 1027 - 2026, 0, 0}, .sign = false, .zero = true, .ip = 24}
     );
+
+    test_execute(
+        arena,
+        STR(
+            "bits 16\n"
+            "mov cx, 3\n"
+            "mov bx, 1000\n"
+            "loop_start:\n"
+            "add bx, 10\n"
+            "sub cx, 1\n"
+            "jnz loop_start\n"
+        ),
+        (CPU) {.regs = {0, 0, 0, 1000 + 30, 0, 0, 0, 0}, .sign = false, .zero = true, .ip = 14}
+    );
+
 
     return 0;
 }
