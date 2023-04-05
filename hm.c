@@ -1111,7 +1111,9 @@ test_decode(Arena* arena, Str input) {
 }
 
 typedef struct CPU {
-    u16 regs[RegisterID_Count];
+    u16  regs[RegisterID_Count];
+    bool zero;
+    bool sign;
 } CPU;
 
 function void
@@ -1154,19 +1156,64 @@ test_execute(Arena* arena, Str input, CPU expected) {
                 assert(!"unimplemented");
             } break;
 
+            case InstrKind_add_Immediate_To_RegisterMemory: {
+                assert(instr.op1.kind == OpID_Register);
+                assert(instr.op2.kind == OpID_Immediate);
+
+                assert(instr.op1.reg.offset == 0);
+                assert(instr.op1.reg.bytes == 2);
+
+                u16 result = cpu.regs[instr.op1.reg.id] + instr.op2.immediate.val;
+                cpu.regs[instr.op1.reg.id] = result;
+
+                cpu.zero = result == 0;
+                cpu.sign = (result & (1 << 15)) != 0;
+            } break;
+
             case InstrKind_add_RegisterMemory_With_Register_To_Either:
-            case InstrKind_add_Immediate_To_RegisterMemory:
             case InstrKind_add_Immediate_To_Accumulator: {
                 assert(!"unimplemented");
             } break;
 
             case InstrKind_sub_RegisterMemory_With_Register_To_Either:
-            case InstrKind_sub_Immediate_From_RegisterMemory:
+            case InstrKind_cmp_RegisterMemory_And_Register: {
+                assert(instr.op1.kind == OpID_Register);
+                assert(instr.op2.kind == OpID_Register);
+
+                assert(instr.op1.reg.offset == 0);
+                assert(instr.op1.reg.bytes == 2);
+
+                assert(instr.op2.reg.offset == 0);
+                assert(instr.op2.reg.bytes == 2);
+
+                u16 result = cpu.regs[instr.op1.reg.id] - cpu.regs[instr.op2.reg.id];
+
+                if (instr.kind == InstrKind_sub_RegisterMemory_With_Register_To_Either) {
+                    cpu.regs[instr.op1.reg.id] = result;
+                }
+
+                cpu.zero = result == 0;
+                cpu.sign = (result & (1 << 15)) != 0;
+            } break;
+
+            case InstrKind_sub_Immediate_From_RegisterMemory: {
+                assert(instr.op1.kind == OpID_Register);
+                assert(instr.op2.kind == OpID_Immediate);
+
+                assert(instr.op1.reg.offset == 0);
+                assert(instr.op1.reg.bytes == 2);
+
+                u16 result = cpu.regs[instr.op1.reg.id] - instr.op2.immediate.val;
+                cpu.regs[instr.op1.reg.id] = result;
+
+                cpu.zero = result == 0;
+                cpu.sign = (result & (1 << 15)) != 0;
+            } break;
+
             case InstrKind_sub_Immediate_From_Accumulator: {
                 assert(!"unimplemented");
             } break;
 
-            case InstrKind_cmp_RegisterMemory_And_Register:
             case InstrKind_cmp_Immediate_With_RegisterMemory:
             case InstrKind_cmp_Immediate_With_Accumulator: {
                 assert(!"unimplemented");
@@ -1378,6 +1425,25 @@ main() {
             "mov ax, di\n"
         ),
         (CPU) {.regs = {4, 2, 1, 3, 1, 2, 3, 4}}
+    );
+
+    test_execute(
+        arena,
+        STR(
+            "bits 16\n"
+
+            "mov bx, -4093\n"
+            "mov cx, 3841\n"
+            "sub bx, cx\n"
+
+            "mov sp, 998\n"
+            "mov bp, 999\n"
+            "cmp bp, sp\n"
+
+            "add bp, 1027\n"
+            "sub bp, 2026\n"
+        ),
+        (CPU) {.regs = {0, 3841, 0, -4093 - 3841, 998, 999 + 1027 - 2026, 0, 0}, .sign = false, .zero = true}
     );
 
     return 0;
