@@ -1141,21 +1141,62 @@ test_execute(Arena* arena, Str input, CPU expected) {
             } break;
 
             case InstrKind_mov_RegisterMemory_ToFrom_Register: {
-                assert(instr.op1.kind == OpID_Register);
-                assert(instr.op1.reg.offset == 0);
-                assert(instr.op1.reg.bytes == 2);
-
-                switch (instr.op2.kind) {
+                switch (instr.op1.kind) {
                     case OpID_Register: {
-                        assert(instr.op2.reg.offset == 0);
-                        assert(instr.op2.reg.bytes == 2);
+                        assert(instr.op1.kind == OpID_Register);
+                        assert(instr.op1.reg.offset == 0);
+                        assert(instr.op1.reg.bytes == 2);
 
-                        cpu.regs[instr.op1.reg.id] = cpu.regs[instr.op2.reg.id];
+                        switch (instr.op2.kind) {
+                            case OpID_Register: {
+                                assert(instr.op2.reg.offset == 0);
+                                assert(instr.op2.reg.bytes == 2);
+
+                                cpu.regs[instr.op1.reg.id] = cpu.regs[instr.op2.reg.id];
+                            } break;
+
+                            case OpID_Memory: {
+                                u16 base = 0;
+                                if (!instr.op2.mem.direct) {
+                                    switch (instr.op1.mem.id) {
+                                        case FormulaID_BX_SI: base = cpu.regs[RegisterID_BX] + cpu.regs[RegisterID_SI]; break;
+                                        case FormulaID_BX_DI: base = cpu.regs[RegisterID_BX] + cpu.regs[RegisterID_DI]; break;
+                                        case FormulaID_BP_SI: base = cpu.regs[RegisterID_BP] + cpu.regs[RegisterID_SI]; break;
+                                        case FormulaID_BP_DI: base = cpu.regs[RegisterID_BP] + cpu.regs[RegisterID_DI]; break;
+                                        case FormulaID_SI: base = cpu.regs[RegisterID_SI]; break;
+                                        case FormulaID_DI: base = cpu.regs[RegisterID_DI]; break;
+                                        case FormulaID_BP: base = cpu.regs[RegisterID_BP]; break;
+                                        case FormulaID_BX: base = cpu.regs[RegisterID_BX]; break;
+                                    }
+                                }
+
+                                cpu.regs[instr.op1.reg.id] = memory[base + instr.op2.mem.disp];
+                            } break;
+
+                            default: assert(!"unreachable"); break;
+                        }
                     } break;
 
                     case OpID_Memory: {
-                        assert(instr.op2.mem.direct);
-                        cpu.regs[instr.op1.reg.id] = memory[instr.op2.mem.disp];
+                        assert(!instr.op1.mem.direct);
+
+                        u16 base = 0;
+                        switch (instr.op1.mem.id) {
+                            case FormulaID_BX_SI: base = cpu.regs[RegisterID_BX] + cpu.regs[RegisterID_SI]; break;
+                            case FormulaID_BX_DI: base = cpu.regs[RegisterID_BX] + cpu.regs[RegisterID_DI]; break;
+                            case FormulaID_BP_SI: base = cpu.regs[RegisterID_BP] + cpu.regs[RegisterID_SI]; break;
+                            case FormulaID_BP_DI: base = cpu.regs[RegisterID_BP] + cpu.regs[RegisterID_DI]; break;
+                            case FormulaID_SI: base = cpu.regs[RegisterID_SI]; break;
+                            case FormulaID_DI: base = cpu.regs[RegisterID_DI]; break;
+                            case FormulaID_BP: base = cpu.regs[RegisterID_BP]; break;
+                            case FormulaID_BX: base = cpu.regs[RegisterID_BX]; break;
+                        }
+
+                        assert(instr.op2.kind == OpID_Register);
+                        assert(instr.op2.reg.offset == 0);
+                        assert(instr.op2.reg.bytes == 2);
+
+                        memory[base + instr.op1.mem.disp] = cpu.regs[instr.op2.reg.id];
                     } break;
 
                     default: assert(!"unreachable"); break;
@@ -1208,7 +1249,19 @@ test_execute(Arena* arena, Str input, CPU expected) {
                 cpu.sign = (result & (1 << 15)) != 0;
             } break;
 
-            case InstrKind_add_RegisterMemory_With_Register_To_Either:
+            case InstrKind_add_RegisterMemory_With_Register_To_Either: {
+                assert(instr.op1.kind == OpID_Register);
+                assert(instr.op1.reg.offset == 0);
+                assert(instr.op1.reg.bytes == 2);
+
+                assert(instr.op2.kind == OpID_Register);
+                assert(instr.op2.reg.offset == 0);
+                assert(instr.op2.reg.bytes == 2);
+
+                u16 result = cpu.regs[instr.op1.reg.id] + cpu.regs[instr.op2.reg.id];
+                cpu.regs[instr.op1.reg.id] = result;
+            } break;
+
             case InstrKind_add_Immediate_To_Accumulator: {
                 assert(!"unimplemented");
             } break;
@@ -1525,6 +1578,33 @@ main() {
             "mov bp, word [1006]\n"
         ),
         (CPU) {.regs = {0, 2, 10, 1, 0, 4, 0, 0}, .sign = false, .zero = false, .ip = 48}
+    );
+
+    test_execute(
+        arena,
+        STR(
+            "bits 16\n"
+
+            "mov dx, 6\n"
+            "mov bp, 1000\n"
+
+            "mov si, 0\n"
+            "init_loop_start:\n"
+            "mov word [bp + si], si\n"
+            "add si, 2\n"
+            "cmp si, dx\n"
+            "jnz init_loop_start\n"
+
+            "mov bx, 0\n"
+            "mov si, 0\n"
+            "add_loop_start:\n"
+            "mov cx, word [bp + si]\n"
+            "add bx, cx\n"
+            "add si, 2\n"
+            "cmp si, dx\n"
+            "jnz add_loop_start\n"
+        ),
+        (CPU) {.regs = {0, 0, 6, 0, 0, 1000, 6, 0}, .sign = false, .zero = true, .ip = 35}
     );
 
     return 0;
