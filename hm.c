@@ -1122,6 +1122,7 @@ test_execute(Arena* arena, Str input, CPU expected) {
     prb_Bytes inputBytes = test_decode(arena, input);
 
     CPU cpu = {};
+    u8  memory[65536] = {};
 
     InstrIter instrIter = {inputBytes};
     while (instrIterNext(&instrIter)) {
@@ -1141,18 +1142,53 @@ test_execute(Arena* arena, Str input, CPU expected) {
 
             case InstrKind_mov_RegisterMemory_ToFrom_Register: {
                 assert(instr.op1.kind == OpID_Register);
-                assert(instr.op2.kind == OpID_Register);
-
                 assert(instr.op1.reg.offset == 0);
                 assert(instr.op1.reg.bytes == 2);
 
-                assert(instr.op2.reg.offset == 0);
-                assert(instr.op2.reg.bytes == 2);
+                switch (instr.op2.kind) {
+                    case OpID_Register: {
+                        assert(instr.op2.reg.offset == 0);
+                        assert(instr.op2.reg.bytes == 2);
 
-                cpu.regs[instr.op1.reg.id] = cpu.regs[instr.op2.reg.id];
+                        cpu.regs[instr.op1.reg.id] = cpu.regs[instr.op2.reg.id];
+                    } break;
+
+                    case OpID_Memory: {
+                        assert(instr.op2.mem.direct);
+                        cpu.regs[instr.op1.reg.id] = memory[instr.op2.mem.disp];
+                    } break;
+
+                    default: assert(!"unreachable"); break;
+                }
+
             } break;
 
-            case InstrKind_mov_Immediate_To_RegisterMemory:
+            case InstrKind_mov_Immediate_To_RegisterMemory: {
+                assert(instr.op1.kind == OpID_Memory);
+
+                assert(instr.op2.kind == OpID_Immediate);
+                assert(instr.op2.immediate.bytes == 2);
+
+                if (instr.op1.mem.direct) {
+                    memory[instr.op1.mem.disp] = instr.op2.immediate.val;
+                } else {
+                    u16 base = 0;
+                    switch (instr.op1.mem.id) {
+                        case FormulaID_BX_SI: base = cpu.regs[RegisterID_BX] + cpu.regs[RegisterID_SI]; break;
+                        case FormulaID_BX_DI: base = cpu.regs[RegisterID_BX] + cpu.regs[RegisterID_DI]; break;
+                        case FormulaID_BP_SI: base = cpu.regs[RegisterID_BP] + cpu.regs[RegisterID_SI]; break;
+                        case FormulaID_BP_DI: base = cpu.regs[RegisterID_BP] + cpu.regs[RegisterID_DI]; break;
+                        case FormulaID_SI: base = cpu.regs[RegisterID_SI]; break;
+                        case FormulaID_DI: base = cpu.regs[RegisterID_DI]; break;
+                        case FormulaID_BP: base = cpu.regs[RegisterID_BP]; break;
+                        case FormulaID_BX: base = cpu.regs[RegisterID_BX]; break;
+                    }
+
+                    memory[base + instr.op1.mem.disp] = instr.op2.immediate.val;
+                }
+
+            } break;
+
             case InstrKind_mov_Memory_To_Accumulator:
             case InstrKind_mov_Accumulator_To_Memory: {
                 assert(!"unimplemented");
@@ -1470,6 +1506,26 @@ main() {
         (CPU) {.regs = {0, 0, 0, 1000 + 30, 0, 0, 0, 0}, .sign = false, .zero = true, .ip = 14}
     );
 
+    test_execute(
+        arena,
+        STR(
+            "bits 16\n"
+
+            "mov word [1000], 1\n"
+            "mov word [1002], 2\n"
+            "mov word [1004], 3\n"
+            "mov word [1006], 4\n"
+
+            "mov bx, 1000\n"
+            "mov word [bx + 4], 10\n"
+
+            "mov bx, word [1000]\n"
+            "mov cx, word [1002]\n"
+            "mov dx, word [1004]\n"
+            "mov bp, word [1006]\n"
+        ),
+        (CPU) {.regs = {0, 2, 10, 1, 0, 4, 0, 0}, .sign = false, .zero = false, .ip = 48}
+    );
 
     return 0;
 }
