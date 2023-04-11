@@ -1117,12 +1117,11 @@ typedef struct CPU {
     bool sign;
 } CPU;
 
-function void
-test_execute(Arena* arena, Str input, CPU expected) {
+function CPU
+execute(Arena* arena, Str input, u8* memory) {
     prb_Bytes inputBytes = test_decode(arena, input);
 
     CPU cpu = {};
-    u8  memory[65536] = {};
 
     InstrIter instrIter = {inputBytes};
     while (instrIterNext(&instrIter)) {
@@ -1208,7 +1207,7 @@ test_execute(Arena* arena, Str input, CPU expected) {
                 assert(instr.op1.kind == OpID_Memory);
 
                 assert(instr.op2.kind == OpID_Immediate);
-                assert(instr.op2.immediate.bytes == 2);
+                assert(instr.op2.immediate.val <= UINT8_MAX);
 
                 if (instr.op1.mem.direct) {
                     memory[instr.op1.mem.disp] = instr.op2.immediate.val;
@@ -1305,7 +1304,20 @@ test_execute(Arena* arena, Str input, CPU expected) {
                 assert(!"unimplemented");
             } break;
 
-            case InstrKind_cmp_Immediate_With_RegisterMemory:
+            case InstrKind_cmp_Immediate_With_RegisterMemory: {
+                assert(instr.op1.kind == OpID_Register);
+                assert(instr.op1.reg.offset == 0);
+                assert(instr.op1.reg.bytes == 2);
+
+                assert(instr.op2.kind == OpID_Immediate);
+                assert(instr.op2.immediate.val <= UINT8_MAX);
+
+                u16 result = cpu.regs[instr.op1.reg.id] - instr.op2.immediate.val;
+
+                cpu.zero = result == 0;
+                cpu.sign = (result & (1 << 15)) != 0;
+            } break;
+
             case InstrKind_cmp_Immediate_With_Accumulator: {
                 assert(!"unimplemented");
             } break;
@@ -1341,6 +1353,13 @@ test_execute(Arena* arena, Str input, CPU expected) {
         instrIter.offset = cpu.ip;
     }
 
+    return cpu;
+}
+
+function void
+test_execute(Arena* arena, Str input, CPU expected) {
+    u8  memory[65536] = {};
+    CPU cpu = execute(arena, input, memory);
     assert(prb_memeq(&cpu, &expected, sizeof(cpu)));
 }
 
@@ -1606,6 +1625,45 @@ main() {
         ),
         (CPU) {.regs = {0, 4, 6, 6, 0, 1000, 6, 0}, .sign = false, .zero = true, .ip = 35}
     );
+
+    u8 memory[65536] = {};
+    execute(
+        arena,
+        STR(
+            "bits 16\n"
+
+            "; Start image after one row, to avoid overwriting our code!\n"
+            "mov bp, 64*4\n"
+
+            "mov dx, 0\n"
+            "y_loop_start:\n"
+
+            "mov cx, 0\n"
+            "x_loop_start:\n"
+            "; Fill pixel\n"
+            "mov word [bp + 0], cx ; Red\n"
+            "mov word [bp + 2], dx ; Blue\n"
+            "mov byte [bp + 3], 255 ; Alpha\n"
+
+            "; Advance pixel location\n"
+            "add bp, 4\n"
+
+            "; Advance X coordinate and loop\n"
+            "add cx, 1\n"
+            "cmp cx, 64\n"
+            "jnz x_loop_start\n"
+
+            "; Advance Y coordinate and loop\n"
+            "add dx, 1\n"
+            "cmp dx, 64\n"
+            "jnz y_loop_start\n"
+        ),
+        memory
+    );
+
+    Str rootDir = prb_getParentDir(arena, STR(__FILE__));
+    Str dump = prb_pathJoin(arena, rootDir, STR("dump.data"));
+    prb_writeEntireFile(arena, dump, memory, prb_arrayCount(memory));
 
     return 0;
 }
