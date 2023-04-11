@@ -1158,7 +1158,7 @@ test_execute(Arena* arena, Str input, CPU expected) {
                             case OpID_Memory: {
                                 u16 base = 0;
                                 if (!instr.op2.mem.direct) {
-                                    switch (instr.op1.mem.id) {
+                                    switch (instr.op2.mem.id) {
                                         case FormulaID_BX_SI: base = cpu.regs[RegisterID_BX] + cpu.regs[RegisterID_SI]; break;
                                         case FormulaID_BX_DI: base = cpu.regs[RegisterID_BX] + cpu.regs[RegisterID_DI]; break;
                                         case FormulaID_BP_SI: base = cpu.regs[RegisterID_BP] + cpu.regs[RegisterID_SI]; break;
@@ -1596,7 +1596,7 @@ main() {
             "jnz init_loop_start\n"
 
             "mov bx, 0\n"
-            "mov si, 0\n"
+            "mov si, 2\n"
             "add_loop_start:\n"
             "mov cx, word [bp + si]\n"
             "add bx, cx\n"
@@ -1604,7 +1604,7 @@ main() {
             "cmp si, dx\n"
             "jnz add_loop_start\n"
         ),
-        (CPU) {.regs = {0, 0, 6, 0, 0, 1000, 6, 0}, .sign = false, .zero = true, .ip = 35}
+        (CPU) {.regs = {0, 4, 6, 6, 0, 1000, 6, 0}, .sign = false, .zero = true, .ip = 35}
     );
 
     return 0;
