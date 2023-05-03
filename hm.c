@@ -1363,15 +1363,92 @@ test_execute(Arena* arena, Str input, CPU expected) {
     assert(prb_memeq(&cpu, &expected, sizeof(cpu)));
 }
 
+function i32
+countCycles_getEA(Operand op) {
+    assert(op.kind == OpID_Memory);
+    i32 result = 0;
+    if (op.mem.direct) {
+        result = 6;
+    } else {
+        switch (op.mem.id) {
+            case FormulaID_BX:
+            case FormulaID_BP:
+            case FormulaID_SI:
+            case FormulaID_DI: {
+                result = 5;
+                if (op.mem.disp != 0) {
+                    result = 9;
+                }
+            } break;
+            default: assert(!"unimplemented"); break;
+        }
+    }
+    return result;
+}
+
+function void
+countCycles(Arena* arena, Str input) {
+    prb_Bytes inputBytes = test_decode(arena, input);
+    InstrIter instrIter = {inputBytes};
+
+    i32 total = 0;
+    while (instrIterNext(&instrIter)) {
+        i32 instrCycleCount = 0;
+        switch (instrIter.instr.kind) {
+            case InstrKind_mov_Immediate_To_Register: instrCycleCount = 4; break;
+
+            case InstrKind_mov_RegisterMemory_ToFrom_Register: {
+                switch (instrIter.instr.op1.kind) {
+                    case OpID_Register: {
+                        switch (instrIter.instr.op2.kind) {
+                            case OpID_Register: instrCycleCount = 2; break;
+                            case OpID_Memory: instrCycleCount = 8 + countCycles_getEA(instrIter.instr.op2); break;
+                            default: assert(!"unimplemented"); break;
+                        }
+                    } break;
+                    case OpID_Memory: {
+                        switch (instrIter.instr.op2.kind) {
+                            case OpID_Register: instrCycleCount = 9 + countCycles_getEA(instrIter.instr.op1); break;
+                            default: assert(!"unimplemented"); break;
+                        }
+                    } break;
+                    default: assert(!"unimplemented"); break;
+                }
+            }; break;
+
+            case InstrKind_add_RegisterMemory_With_Register_To_Either: {
+                assert(instrIter.instr.op2.kind == OpID_Register);
+
+                switch (instrIter.instr.op1.kind) {
+                    case OpID_Register: instrCycleCount = 3; break;
+                    case OpID_Memory: instrCycleCount = 16 + countCycles_getEA(instrIter.instr.op1); break;
+                    default: assert(!"unimplemented"); break;
+                }
+            } break;
+
+            case InstrKind_add_Immediate_To_RegisterMemory: {
+                assert(instrIter.instr.op1.kind == OpID_Register);
+                instrCycleCount = 4;
+            } break;
+
+            default: assert(!"unimplemented"); break;
+        }
+        total += instrCycleCount;
+        prb_writeToStdout(prb_fmt(arena, "%d\n", instrCycleCount));
+    }
+    prb_writeToStdout(prb_fmt(arena, "\ntotal: %d\n", total));
+}
+
 int
 main() {
     Arena  arena_ = prb_createArenaFromVmem(1 * prb_GIGABYTE);
     Arena* arena = &arena_;
 
+    // NOTE(khvorov) The random asm is compiled from the various listings here
+    // https://github.com/cmuratori/computer_enhance
+
     test_decode(
         arena,
-        // NOTE(khvorov) This random asm is compiled from the various listings here
-        // https://github.com/cmuratori/computer_enhance
         STR(
             "bits 16\n"
 
@@ -1664,6 +1741,30 @@ main() {
     Str rootDir = prb_getParentDir(arena, STR(__FILE__));
     Str dump = prb_pathJoin(arena, rootDir, STR("dump.data"));
     prb_writeEntireFile(arena, dump, memory, prb_arrayCount(memory));
+
+    countCycles(
+        arena,
+        STR("bits 16\n"
+            "mov bx, 1000\n"
+            "mov bp, 2000\n"
+            "mov si, 3000\n"
+            "mov di, 4000\n"
+            "mov cx, bx\n"
+            "mov dx, 12\n"
+            "mov dx, [1000]\n"
+            "mov cx, [bx]\n"
+            "mov cx, [bp]\n"
+            "mov [si], cx\n"
+            "mov [di], cx \n"
+            "mov cx, [bx + 1000]\n"
+            "mov cx, [bp + 1000]\n"
+            "mov [si + 1000], cx \n"
+            "mov [di + 1000], cx\n"
+            "add cx, dx\n"
+            "add [di + 1000], cx\n"
+            "add dx, 50\n"
+        )
+    );
 
     return 0;
 }
