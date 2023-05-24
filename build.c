@@ -548,11 +548,26 @@ main() {
         assert(prb_writeEntireFile(arena, hmpath, hmnewContent.ptr, hmnewContent.len));
     }
 
-    // NOTE(khvorov) Compile and run the main file
-    {
+    // NOTE(khvorov) Compile and run the main files
+    if (false) {
         Str hmout = prb_replaceExt(arena, hmpath, STR("exe"));
-        execCmd(arena, prb_fmt(arena, "clang -g -Wall -Wextra -Wno-missing-field-initializers %.*s -o %.*s", LIT(hmpath), LIT(hmout)));
+        Str cmd = prb_fmt(arena, "clang -g -Wall -Wextra -Wno-missing-field-initializers %.*s -o %.*s", LIT(hmpath), LIT(hmout));
+#if prb_PLATFORM_WINDOWS
+        cmd = prb_fmt(arena, "%.*s -Wl,-incremental:no", LIT(cmd));
+#endif
+        execCmd(arena, cmd);
         execCmd(arena, hmout);
+    }
+
+    if (true) {
+        Str path = prb_pathJoin(arena, rootDir, STR("hm2.c"));
+        Str out = prb_replaceExt(arena, path, STR("exe"));
+        Str cmd = prb_fmt(arena, "clang -g -Wall -Wextra -Wno-missing-field-initializers %.*s -o %.*s", LIT(path), LIT(out));
+#if prb_PLATFORM_WINDOWS
+        cmd = prb_fmt(arena, "%.*s -Wl,-incremental:no", LIT(cmd));
+#endif
+        execCmd(arena, cmd);
+        execCmd(arena, out);
     }
 
     return 0;

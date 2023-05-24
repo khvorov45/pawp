@@ -1,7 +1,9 @@
 *.pdf
+*.pdb
 *.exe
 *.asm
 *.exe
 *.bin
 .vscode
+*.json
 *.data
