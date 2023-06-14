@@ -1,3 +1,3 @@
 SCRIPT_DIR=$(dirname "$0")
-RUN_BIN=$SCRIPT_DIR/build.exe
-clang -g -Wall -Wextra $SCRIPT_DIR/build.c -o $RUN_BIN -lpthread && $RUN_BIN
+RUN_BIN=$SCRIPT_DIR/hm2.exe
+clang -g -Wall -Wextra $SCRIPT_DIR/hm2.c -o $RUN_BIN -lpthread -lm && $RUN_BIN

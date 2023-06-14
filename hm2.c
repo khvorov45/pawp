@@ -8,6 +8,7 @@
 #define LIT(x) prb_LIT(x)
 
 typedef intptr_t isize;
+typedef uint64_t u64;
 typedef float    f32;
 typedef double   f64;
 
@@ -200,10 +201,37 @@ expectNumber(JsonIter* iter) {
     return parsed.parsedF64;
 }
 
+function void
+addTime(prb_GrowingStr* gstr, u64 total, u64 freqPerSec, u64 diff, Str label) {
+    prb_addStrSegment(gstr, "%.*s: ", LIT(label));
+    double diffSec = (double)diff / (double)freqPerSec;
+    double prop = (double)diff / (double)total;
+    prb_addStrSegment(gstr, "%llu %.2gs %.2g%%", (unsigned long long)(diff), diffSec, prop * 100.0);
+    prb_addStrSegment(gstr, "\n");
+}
+
 int
 main() {
+    u64 timeStart = __rdtsc();
+
     Arena  arena_ = prb_createArenaFromVmem(1 * prb_GIGABYTE);
     Arena* arena = &arena_;
+
+    u64 timeArenaInit = __rdtsc();
+
+    u64 rdtscFrequencyPerSecond = 0;
+    {
+        prb_TimeStart timerStart = prb_timeStart();
+        u64           rdtscStart = __rdtsc();
+        f32           msToWait = 100.0f;
+        while (prb_getMsFrom(timerStart) < msToWait) {}
+        u64 rdtscEnd = __rdtsc();
+        u64 rdtscDiff = rdtscEnd - rdtscStart;
+        rdtscFrequencyPerSecond = rdtscDiff / (u64)msToWait * 1000;
+        prb_writeToStdout(prb_fmt(arena, "rdtsc freq: %llu\n", (unsigned long long)rdtscFrequencyPerSecond));
+    }
+
+    u64 timeGetRdtscFreq = __rdtsc();
 
     Str rootDir = prb_getParentDir(arena, STR(__FILE__));
 
@@ -212,7 +240,7 @@ main() {
     Input input = {};
     {
         isize seed = 8;
-        isize pairCount = 100;
+        isize pairCount = 1000000;
         Pair* pairs = 0;
         arrsetlen(pairs, pairCount);
         arrsetlen(input.referenceHaversine, pairCount);
@@ -262,11 +290,18 @@ main() {
         prb_addStrSegment(&builder, "]}");
         input.json = prb_endStr(&builder);
     }
+
+    u64 timeGenInput = __rdtsc();
+
     prb_writeEntireFile(arena, prb_pathJoin(arena, rootDir, STR("input.json")), input.json.ptr, input.json.len);
+
+    u64 timeWriteInput = __rdtsc();
 
     if (true) {
         prb_writeToStdout(prb_fmt(arena, "Expected average: %f\n", input.expectedAverage));
     }
+
+    u64 timePrintAverage = __rdtsc();
 
     {
         JsonIter jsonIter = createJsonIter(input.json);
@@ -322,6 +357,22 @@ main() {
         assert(absval(average - input.expectedAverage) < 0.00001);
         expectTokenKind(&jsonIter, JsonTokenKind_CurlyClose);
         assert(!jsonIterNext(&jsonIter));
+    }
+
+    u64 timeParseAndCheck = __rdtsc();
+    {
+        prb_GrowingStr gstr = prb_beginStr(arena);
+        prb_addStrSegment(&gstr, "\n");
+        u64 total = timeParseAndCheck - timeStart;
+        addTime(&gstr, total, rdtscFrequencyPerSecond, timeArenaInit - timeStart, STR("ArenaInit"));
+        addTime(&gstr, total, rdtscFrequencyPerSecond, timeGetRdtscFreq - timeArenaInit, STR("GetRdtscFreq"));
+        addTime(&gstr, total, rdtscFrequencyPerSecond, timeGenInput - timeGetRdtscFreq, STR("GenInput"));
+        addTime(&gstr, total, rdtscFrequencyPerSecond, timeWriteInput - timeGenInput, STR("WriteInput"));
+        addTime(&gstr, total, rdtscFrequencyPerSecond, timePrintAverage - timeWriteInput, STR("PrintAverage"));
+        addTime(&gstr, total, rdtscFrequencyPerSecond, timeParseAndCheck - timePrintAverage, STR("ParseAndCheck"));
+        prb_addStrSegment(&gstr, "total: %llu %.2gs\n", (unsigned long long)total, (double)total / (double)rdtscFrequencyPerSecond);
+        Str msg = prb_endStr(&gstr);
+        prb_writeToStdout(msg);
     }
 
     return 0;
