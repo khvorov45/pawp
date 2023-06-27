@@ -16,6 +16,75 @@ typedef prb_Str        Str;
 typedef prb_GrowingStr GrowingStr;
 typedef prb_Arena      Arena;
 
+typedef struct TimedSection {
+    Str name;
+    u64 timeBegin;
+    u64 timeEnd;
+} TimedSection;
+
+typedef struct Profile {
+    u64 timeStart;
+    u64 timeEnd;
+    struct {
+        TimedSection* ptr;
+        isize         len;
+        isize         cap;
+    } sections;
+} Profile;
+
+Profile* globalProfile = 0;
+
+function Profile*
+initProfile(Arena* arena, u64 timeStart) {
+    Profile* profile = prb_arenaAllocStruct(arena, Profile);
+    profile->timeStart = timeStart;
+    profile->sections.cap = 1024;
+    profile->sections.ptr = prb_arenaAllocArray(arena, TimedSection, profile->sections.cap);
+    return profile;
+}
+
+function TimedSection*
+profileSectionBegin(Str name) {
+    assert(globalProfile);
+    assert(globalProfile->sections.len < globalProfile->sections.cap);
+    TimedSection* section = globalProfile->sections.ptr + globalProfile->sections.len;
+    globalProfile->sections.len += 1;
+    section->name = name;
+    section->timeBegin = __rdtsc();
+    return section;
+}
+
+function void
+profileSectionEnd(TimedSection* section) {
+    section->timeEnd = __rdtsc();
+}
+
+function void
+addTime(prb_GrowingStr* gstr, u64 total, u64 freqPerSec, u64 diff, Str label) {
+    prb_addStrSegment(gstr, "%.*s: ", LIT(label));
+    double diffSec = (double)diff / (double)freqPerSec;
+    double prop = (double)diff / (double)total;
+    prb_addStrSegment(gstr, "%llu %.2gs %.2g%%", (unsigned long long)(diff), diffSec, prop * 100.0);
+    prb_addStrSegment(gstr, "\n");
+}
+
+function void
+profileEnd(Arena* arena, u64 rdtscFrequencyPerSecond) {
+    assert(globalProfile);
+    globalProfile->timeEnd = __rdtsc();
+
+    prb_GrowingStr gstr = prb_beginStr(arena);
+    prb_addStrSegment(&gstr, "\n");
+    u64 total = globalProfile->timeEnd - globalProfile->timeStart;
+    for (isize ind = 0; ind < globalProfile->sections.len; ind++) {
+        TimedSection* section = globalProfile->sections.ptr + ind;
+        addTime(&gstr, total, rdtscFrequencyPerSecond, section->timeEnd - section->timeBegin, section->name);
+    }
+    prb_addStrSegment(&gstr, "total: %llu %.2gs\n", (unsigned long long)total, (double)total / (double)rdtscFrequencyPerSecond);
+    Str msg = prb_endStr(&gstr);
+    prb_writeToStdout(msg);
+}
+
 typedef struct Input {
     Str  json;
     f64* referenceHaversine;
@@ -201,15 +270,6 @@ expectNumber(JsonIter* iter) {
     return parsed.parsedF64;
 }
 
-function void
-addTime(prb_GrowingStr* gstr, u64 total, u64 freqPerSec, u64 diff, Str label) {
-    prb_addStrSegment(gstr, "%.*s: ", LIT(label));
-    double diffSec = (double)diff / (double)freqPerSec;
-    double prop = (double)diff / (double)total;
-    prb_addStrSegment(gstr, "%llu %.2gs %.2g%%", (unsigned long long)(diff), diffSec, prop * 100.0);
-    prb_addStrSegment(gstr, "\n");
-}
-
 int
 main() {
     u64 timeStart = __rdtsc();
@@ -217,10 +277,12 @@ main() {
     Arena  arena_ = prb_createArenaFromVmem(1 * prb_GIGABYTE);
     Arena* arena = &arena_;
 
-    u64 timeArenaInit = __rdtsc();
+    globalProfile = initProfile(arena, timeStart);
 
     u64 rdtscFrequencyPerSecond = 0;
     {
+        TimedSection* getRdtscFreqSection = profileSectionBegin(STR("getRdtscFreq"));
+
         prb_TimeStart timerStart = prb_timeStart();
         u64           rdtscStart = __rdtsc();
         f32           msToWait = 100.0f;
@@ -229,9 +291,9 @@ main() {
         u64 rdtscDiff = rdtscEnd - rdtscStart;
         rdtscFrequencyPerSecond = rdtscDiff / (u64)msToWait * 1000;
         prb_writeToStdout(prb_fmt(arena, "rdtsc freq: %llu\n", (unsigned long long)rdtscFrequencyPerSecond));
-    }
 
-    u64 timeGetRdtscFreq = __rdtsc();
+        profileSectionEnd(getRdtscFreqSection);
+    }
 
     Str rootDir = prb_getParentDir(arena, STR(__FILE__));
 
@@ -239,6 +301,8 @@ main() {
 
     Input input = {};
     {
+        TimedSection* genInputSection = profileSectionBegin(STR("genInput"));
+
         isize seed = 8;
         isize pairCount = 1000000;
         Pair* pairs = 0;
@@ -289,21 +353,21 @@ main() {
 
         prb_addStrSegment(&builder, "]}");
         input.json = prb_endStr(&builder);
+
+        profileSectionEnd(genInputSection);
     }
 
-    u64 timeGenInput = __rdtsc();
-
+    TimedSection* writeInputSection = profileSectionBegin(STR("writeInput"));
     prb_writeEntireFile(arena, prb_pathJoin(arena, rootDir, STR("input.json")), input.json.ptr, input.json.len);
-
-    u64 timeWriteInput = __rdtsc();
+    profileSectionEnd(writeInputSection);
 
     if (true) {
         prb_writeToStdout(prb_fmt(arena, "Expected average: %f\n", input.expectedAverage));
     }
 
-    u64 timePrintAverage = __rdtsc();
-
     {
+        TimedSection* parseAndCheckSection = profileSectionBegin(STR("parseAndCheck"));
+
         JsonIter jsonIter = createJsonIter(input.json);
         expectTokenKind(&jsonIter, JsonTokenKind_CurlyOpen);
         expectString(&jsonIter, STR("pairs"));
@@ -357,23 +421,10 @@ main() {
         assert(absval(average - input.expectedAverage) < 0.00001);
         expectTokenKind(&jsonIter, JsonTokenKind_CurlyClose);
         assert(!jsonIterNext(&jsonIter));
+
+        profileSectionEnd(parseAndCheckSection);
     }
 
-    u64 timeParseAndCheck = __rdtsc();
-    {
-        prb_GrowingStr gstr = prb_beginStr(arena);
-        prb_addStrSegment(&gstr, "\n");
-        u64 total = timeParseAndCheck - timeStart;
-        addTime(&gstr, total, rdtscFrequencyPerSecond, timeArenaInit - timeStart, STR("ArenaInit"));
-        addTime(&gstr, total, rdtscFrequencyPerSecond, timeGetRdtscFreq - timeArenaInit, STR("GetRdtscFreq"));
-        addTime(&gstr, total, rdtscFrequencyPerSecond, timeGenInput - timeGetRdtscFreq, STR("GenInput"));
-        addTime(&gstr, total, rdtscFrequencyPerSecond, timeWriteInput - timeGenInput, STR("WriteInput"));
-        addTime(&gstr, total, rdtscFrequencyPerSecond, timePrintAverage - timeWriteInput, STR("PrintAverage"));
-        addTime(&gstr, total, rdtscFrequencyPerSecond, timeParseAndCheck - timePrintAverage, STR("ParseAndCheck"));
-        prb_addStrSegment(&gstr, "total: %llu %.2gs\n", (unsigned long long)total, (double)total / (double)rdtscFrequencyPerSecond);
-        Str msg = prb_endStr(&gstr);
-        prb_writeToStdout(msg);
-    }
-
+    profileEnd(arena, rdtscFrequencyPerSecond);
     return 0;
 }
