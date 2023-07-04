@@ -43,7 +43,7 @@ initProfile(Arena* arena, u64 timeStart) {
     return profile;
 }
 
-#define profileSectionBegin(name) profileSectionBegin_(name, __COUNTER__)
+#define profileSectionBegin(name) TimedSection* name##Section = profileSectionBegin_(STR(#name), __COUNTER__)
 function TimedSection*
 profileSectionBegin_(Str name, isize index) {
     assert(globalProfile);
@@ -55,8 +55,9 @@ profileSectionBegin_(Str name, isize index) {
     return section;
 }
 
+#define profileSectionEnd(name) profileSectionEnd_(name##Section)
 function void
-profileSectionEnd(TimedSection* section) {
+profileSectionEnd_(TimedSection* section) {
     section->timeEnd = __rdtsc();
 }
 
@@ -283,7 +284,7 @@ main() {
 
     u64 rdtscFrequencyPerSecond = 0;
     {
-        TimedSection* getRdtscFreqSection = profileSectionBegin(STR("getRdtscFreq"));
+        profileSectionBegin(getRdtscFreq);
 
         prb_TimeStart timerStart = prb_timeStart();
         u64           rdtscStart = __rdtsc();
@@ -294,7 +295,7 @@ main() {
         rdtscFrequencyPerSecond = rdtscDiff / (u64)msToWait * 1000;
         prb_writeToStdout(prb_fmt(arena, "rdtsc freq: %llu\n", (unsigned long long)rdtscFrequencyPerSecond));
 
-        profileSectionEnd(getRdtscFreqSection);
+        profileSectionEnd(getRdtscFreq);
     }
 
     Str rootDir = prb_getParentDir(arena, STR(__FILE__));
@@ -303,7 +304,7 @@ main() {
 
     Input input = {};
     {
-        TimedSection* genInputSection = profileSectionBegin(STR("genInput"));
+        profileSectionBegin(genInput);
 
         isize seed = 8;
         isize pairCount = 1000000;
@@ -356,19 +357,19 @@ main() {
         prb_addStrSegment(&builder, "]}");
         input.json = prb_endStr(&builder);
 
-        profileSectionEnd(genInputSection);
+        profileSectionEnd(genInput);
     }
 
-    TimedSection* writeInputSection = profileSectionBegin(STR("writeInput"));
+    profileSectionBegin(writeInput);
     prb_writeEntireFile(arena, prb_pathJoin(arena, rootDir, STR("input.json")), input.json.ptr, input.json.len);
-    profileSectionEnd(writeInputSection);
+    profileSectionEnd(writeInput);
 
     if (true) {
         prb_writeToStdout(prb_fmt(arena, "Expected average: %f\n", input.expectedAverage));
     }
 
     {
-        TimedSection* parseAndCheckSection = profileSectionBegin(STR("parseAndCheck"));
+        profileSectionBegin(parseAndCheck);
 
         JsonIter jsonIter = createJsonIter(input.json);
         expectTokenKind(&jsonIter, JsonTokenKind_CurlyOpen);
@@ -424,7 +425,7 @@ main() {
         expectTokenKind(&jsonIter, JsonTokenKind_CurlyClose);
         assert(!jsonIterNext(&jsonIter));
 
-        profileSectionEnd(parseAndCheckSection);
+        profileSectionEnd(parseAndCheck);
     }
 
     profileEnd(arena, rdtscFrequencyPerSecond);
