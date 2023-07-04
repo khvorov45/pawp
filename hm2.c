@@ -16,49 +16,41 @@ typedef prb_Str        Str;
 typedef prb_GrowingStr GrowingStr;
 typedef prb_Arena      Arena;
 
+typedef struct ProfileAnchor {
+    Str   name;
+    u64   timeTaken;
+    isize count;
+} ProfileAnchor;
+
 typedef struct TimedSection {
-    Str name;
-    u64 timeBegin;
-    u64 timeEnd;
+    u64   timeBegin;
+    isize anchorIndex;
 } TimedSection;
 
+#define PROFILE_ANCHOR_COUNT 1024
 typedef struct Profile {
-    u64 timeStart;
-    u64 timeEnd;
-    struct {
-        TimedSection* ptr;
-        isize         cap;
-        isize         len;
-    } sections;
+    u64           timeStart;
+    ProfileAnchor anchors[PROFILE_ANCHOR_COUNT];
 } Profile;
 
-Profile* globalProfile = 0;
+static Profile globalProfile;
 
-function Profile*
-initProfile(Arena* arena, u64 timeStart) {
-    Profile* profile = prb_arenaAllocStruct(arena, Profile);
-    profile->timeStart = timeStart;
-    profile->sections.cap = 1024;
-    profile->sections.ptr = prb_arenaAllocArray(arena, TimedSection, profile->sections.cap);
-    return profile;
-}
-
-#define profileSectionBegin(name) TimedSection* name##Section = profileSectionBegin_(STR(#name), __COUNTER__)
-function TimedSection*
+#define profileSectionBegin(name) TimedSection name##Section = profileSectionBegin_(STR(#name), __COUNTER__)
+function TimedSection
 profileSectionBegin_(Str name, isize index) {
-    assert(globalProfile);
-    assert(index < globalProfile->sections.cap);
-    globalProfile->sections.len = prb_max(globalProfile->sections.len, index + 1);
-    TimedSection* section = globalProfile->sections.ptr + index;
-    section->name = name;
-    section->timeBegin = __rdtsc();
+    assert(index < PROFILE_ANCHOR_COUNT);
+    globalProfile.anchors[index].name = name;
+    TimedSection section = {__rdtsc(), index};
     return section;
 }
 
 #define profileSectionEnd(name) profileSectionEnd_(name##Section)
 function void
-profileSectionEnd_(TimedSection* section) {
-    section->timeEnd = __rdtsc();
+profileSectionEnd_(TimedSection section) {
+    ProfileAnchor* anchor = globalProfile.anchors + section.anchorIndex;
+    assert(anchor->name.ptr);
+    anchor->count += 1;
+    anchor->timeTaken += __rdtsc() - section.timeBegin;
 }
 
 function void
@@ -72,16 +64,18 @@ addTime(prb_GrowingStr* gstr, u64 total, u64 freqPerSec, u64 diff, Str label) {
 
 function void
 profileEnd(Arena* arena, u64 rdtscFrequencyPerSecond) {
-    assert(globalProfile);
-    globalProfile->timeEnd = __rdtsc();
+    u64 timeEnd = __rdtsc();
 
     prb_GrowingStr gstr = prb_beginStr(arena);
     prb_addStrSegment(&gstr, "\n");
-    u64 total = globalProfile->timeEnd - globalProfile->timeStart;
-    for (isize ind = 0; ind < globalProfile->sections.len; ind++) {
-        TimedSection* section = globalProfile->sections.ptr + ind;
-        assert(section->timeEnd != 0);
-        addTime(&gstr, total, rdtscFrequencyPerSecond, section->timeEnd - section->timeBegin, section->name);
+    u64 total = timeEnd - globalProfile.timeStart;
+    for (isize ind = 0; ind < PROFILE_ANCHOR_COUNT; ind++) {
+        ProfileAnchor* anchor = globalProfile.anchors + ind;
+        if (anchor->name.ptr == 0) {
+            break;
+        }
+        assert(anchor->count > 0);
+        addTime(&gstr, total, rdtscFrequencyPerSecond, anchor->timeTaken, anchor->name);
     }
     prb_addStrSegment(&gstr, "total: %llu %.2gs\n", (unsigned long long)total, (double)total / (double)rdtscFrequencyPerSecond);
     Str msg = prb_endStr(&gstr);
@@ -275,12 +269,12 @@ expectNumber(JsonIter* iter) {
 
 int
 main() {
-    u64 timeStart = __rdtsc();
+    globalProfile.timeStart = __rdtsc();
 
+    profileSectionBegin(arenaInit);
     Arena  arena_ = prb_createArenaFromVmem(1 * prb_GIGABYTE);
     Arena* arena = &arena_;
-
-    globalProfile = initProfile(arena, timeStart);
+    profileSectionEnd(arenaInit);
 
     u64 rdtscFrequencyPerSecond = 0;
     {
