@@ -54,12 +54,10 @@ profileSectionEnd_(TimedSection section) {
 }
 
 function void
-addTime(prb_GrowingStr* gstr, u64 total, u64 freqPerSec, u64 diff, Str label) {
-    prb_addStrSegment(gstr, "%.*s: ", LIT(label));
+addTime(prb_GrowingStr* gstr, u64 total, u64 freqPerSec, u64 diff) {
     double diffSec = (double)diff / (double)freqPerSec;
     double prop = (double)diff / (double)total;
     prb_addStrSegment(gstr, "%llu %.2gs %.2g%%", (unsigned long long)(diff), diffSec, prop * 100.0);
-    prb_addStrSegment(gstr, "\n");
 }
 
 function void
@@ -75,7 +73,13 @@ profileEnd(Arena* arena, u64 rdtscFrequencyPerSecond) {
             break;
         }
         assert(anchor->count > 0);
-        addTime(&gstr, total, rdtscFrequencyPerSecond, anchor->timeTaken, anchor->name);
+        prb_addStrSegment(&gstr, "%.*s: ", LIT(anchor->name));
+        addTime(&gstr, total, rdtscFrequencyPerSecond, anchor->timeTaken);
+        if (anchor->count > 1) {
+            prb_addStrSegment(&gstr, " x%lld avg for 1: ", (long long)anchor->count);
+            addTime(&gstr, total, rdtscFrequencyPerSecond, anchor->timeTaken / anchor->count);
+        }
+        prb_addStrSegment(&gstr, "\n");
     }
     prb_addStrSegment(&gstr, "total: %llu %.2gs\n", (unsigned long long)total, (double)total / (double)rdtscFrequencyPerSecond);
     Str msg = prb_endStr(&gstr);
@@ -322,6 +326,8 @@ main() {
         }
 
         for (isize ind = 0; ind < pairCount; ind++) {
+            profileSectionBegin(genPair);
+
             Pair pair = {
                 .x0 = prb_randomF3201(&rng) * xrange + xmin,
                 .x1 = prb_randomF3201(&rng) * xrange + xmin,
@@ -334,6 +340,8 @@ main() {
             f64 haversine = ReferenceHaversine(pair.x0, pair.y0, pair.x1, pair.y1, earthRadius);
             input.referenceHaversine[ind] = haversine;
             input.expectedAverage += haversine / pairCount;
+
+            profileSectionEnd(genPair);
         }
 
         GrowingStr builder = prb_beginStr(arena);
