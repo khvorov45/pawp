@@ -27,8 +27,8 @@ typedef struct Profile {
     u64 timeEnd;
     struct {
         TimedSection* ptr;
-        isize         len;
         isize         cap;
+        isize         len;
     } sections;
 } Profile;
 
@@ -43,12 +43,13 @@ initProfile(Arena* arena, u64 timeStart) {
     return profile;
 }
 
+#define profileSectionBegin(name) profileSectionBegin_(name, __COUNTER__)
 function TimedSection*
-profileSectionBegin(Str name) {
+profileSectionBegin_(Str name, isize index) {
     assert(globalProfile);
-    assert(globalProfile->sections.len < globalProfile->sections.cap);
-    TimedSection* section = globalProfile->sections.ptr + globalProfile->sections.len;
-    globalProfile->sections.len += 1;
+    assert(index < globalProfile->sections.cap);
+    globalProfile->sections.len = prb_max(globalProfile->sections.len, index + 1);
+    TimedSection* section = globalProfile->sections.ptr + index;
     section->name = name;
     section->timeBegin = __rdtsc();
     return section;
@@ -78,6 +79,7 @@ profileEnd(Arena* arena, u64 rdtscFrequencyPerSecond) {
     u64 total = globalProfile->timeEnd - globalProfile->timeStart;
     for (isize ind = 0; ind < globalProfile->sections.len; ind++) {
         TimedSection* section = globalProfile->sections.ptr + ind;
+        assert(section->timeEnd != 0);
         addTime(&gstr, total, rdtscFrequencyPerSecond, section->timeEnd - section->timeBegin, section->name);
     }
     prb_addStrSegment(&gstr, "total: %llu %.2gs\n", (unsigned long long)total, (double)total / (double)rdtscFrequencyPerSecond);
