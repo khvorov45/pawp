@@ -19,38 +19,48 @@ typedef prb_Arena      Arena;
 typedef struct ProfileAnchor {
     Str   name;
     u64   timeTaken;
+    u64   timeTakenChildren;
     isize count;
 } ProfileAnchor;
 
 typedef struct TimedSection {
     u64   timeBegin;
     isize anchorIndex;
+    isize parentIndex;
 } TimedSection;
 
 #define PROFILE_ANCHOR_COUNT 1024
 typedef struct Profile {
     u64           timeStart;
+    isize         currentOpenIndex;
     ProfileAnchor anchors[PROFILE_ANCHOR_COUNT];
 } Profile;
 
 static Profile globalProfile;
 
-#define profileSectionBegin(name) TimedSection name##Section = profileSectionBegin_(STR(#name), __COUNTER__)
+#define profileSectionBegin(name) TimedSection name##Section = profileSectionBegin_(STR(#name), __COUNTER__ + 1)
 function TimedSection
 profileSectionBegin_(Str name, isize index) {
     assert(index < PROFILE_ANCHOR_COUNT);
     globalProfile.anchors[index].name = name;
-    TimedSection section = {__rdtsc(), index};
+    TimedSection section = {__rdtsc(), index, globalProfile.currentOpenIndex};
+    globalProfile.currentOpenIndex = index;
     return section;
 }
 
 #define profileSectionEnd(name) profileSectionEnd_(name##Section)
 function void
 profileSectionEnd_(TimedSection section) {
+    ProfileAnchor* parent = globalProfile.anchors + section.parentIndex;
     ProfileAnchor* anchor = globalProfile.anchors + section.anchorIndex;
     assert(anchor->name.ptr);
     anchor->count += 1;
-    anchor->timeTaken += __rdtsc() - section.timeBegin;
+
+    u64 diff = __rdtsc() - section.timeBegin;
+    anchor->timeTaken += diff;
+    parent->timeTakenChildren += diff;
+
+    globalProfile.currentOpenIndex = section.parentIndex;
 }
 
 function void
@@ -67,7 +77,7 @@ profileEnd(Arena* arena, u64 rdtscFrequencyPerSecond) {
     prb_GrowingStr gstr = prb_beginStr(arena);
     prb_addStrSegment(&gstr, "\n");
     u64 total = timeEnd - globalProfile.timeStart;
-    for (isize ind = 0; ind < PROFILE_ANCHOR_COUNT; ind++) {
+    for (isize ind = 1; ind < PROFILE_ANCHOR_COUNT; ind++) {
         ProfileAnchor* anchor = globalProfile.anchors + ind;
         if (anchor->name.ptr == 0) {
             break;
@@ -75,6 +85,10 @@ profileEnd(Arena* arena, u64 rdtscFrequencyPerSecond) {
         assert(anchor->count > 0);
         prb_addStrSegment(&gstr, "%.*s: ", LIT(anchor->name));
         addTime(&gstr, total, rdtscFrequencyPerSecond, anchor->timeTaken);
+        if (anchor->timeTakenChildren > 0) {
+            prb_addStrSegment(&gstr, " excl: ");
+            addTime(&gstr, total, rdtscFrequencyPerSecond, anchor->timeTaken - anchor->timeTakenChildren);
+        }
         if (anchor->count > 1) {
             prb_addStrSegment(&gstr, " x%lld avg for 1: ", (long long)anchor->count);
             addTime(&gstr, total, rdtscFrequencyPerSecond, anchor->timeTaken / anchor->count);
