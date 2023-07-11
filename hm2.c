@@ -18,13 +18,14 @@ typedef prb_Arena      Arena;
 
 typedef struct ProfileAnchor {
     Str   name;
-    u64   timeTaken;
-    u64   timeTakenChildren;
+    u64   timeTakenSelf;
+    u64   timeTakenWithChildren;
     isize count;
 } ProfileAnchor;
 
 typedef struct TimedSection {
     u64   timeBegin;
+    u64   oldTimeWithChildren;
     isize anchorIndex;
     isize parentIndex;
 } TimedSection;
@@ -42,8 +43,14 @@ static Profile globalProfile;
 function TimedSection
 profileSectionBegin_(Str name, isize index) {
     assert(index < PROFILE_ANCHOR_COUNT);
-    globalProfile.anchors[index].name = name;
-    TimedSection section = {__rdtsc(), index, globalProfile.currentOpenIndex};
+    ProfileAnchor* anchor = globalProfile.anchors + index;
+    anchor->name = name;
+    TimedSection section = {
+        __rdtsc(),
+        anchor->timeTakenWithChildren,
+        index,
+        globalProfile.currentOpenIndex,
+    };
     globalProfile.currentOpenIndex = index;
     return section;
 }
@@ -57,8 +64,9 @@ profileSectionEnd_(TimedSection section) {
     anchor->count += 1;
 
     u64 diff = __rdtsc() - section.timeBegin;
-    anchor->timeTaken += diff;
-    parent->timeTakenChildren += diff;
+    anchor->timeTakenSelf += diff;
+    anchor->timeTakenWithChildren = section.oldTimeWithChildren + diff;
+    parent->timeTakenSelf -= diff;
 
     globalProfile.currentOpenIndex = section.parentIndex;
 }
@@ -84,14 +92,14 @@ profileEnd(Arena* arena, u64 rdtscFrequencyPerSecond) {
         }
         assert(anchor->count > 0);
         prb_addStrSegment(&gstr, "%.*s: ", LIT(anchor->name));
-        addTime(&gstr, total, rdtscFrequencyPerSecond, anchor->timeTaken);
-        if (anchor->timeTakenChildren > 0) {
+        addTime(&gstr, total, rdtscFrequencyPerSecond, anchor->timeTakenWithChildren);
+        if (anchor->timeTakenWithChildren - anchor->timeTakenSelf > 0) {
             prb_addStrSegment(&gstr, " excl: ");
-            addTime(&gstr, total, rdtscFrequencyPerSecond, anchor->timeTaken - anchor->timeTakenChildren);
+            addTime(&gstr, total, rdtscFrequencyPerSecond, anchor->timeTakenSelf);
         }
         if (anchor->count > 1) {
             prb_addStrSegment(&gstr, " x%lld avg for 1: ", (long long)anchor->count);
-            addTime(&gstr, total, rdtscFrequencyPerSecond, anchor->timeTaken / anchor->count);
+            addTime(&gstr, total, rdtscFrequencyPerSecond, anchor->timeTakenWithChildren / anchor->count);
         }
         prb_addStrSegment(&gstr, "\n");
     }
