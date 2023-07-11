@@ -293,6 +293,19 @@ expectNumber(JsonIter* iter) {
     return parsed.parsedF64;
 }
 
+function void
+recursiveSleep(f32 ms) {
+    profileSectionBegin(recursiveSleep);
+    f32 toSub = 10.0f;
+    if (ms <= toSub) {
+        prb_sleep(ms);
+    } else {
+        prb_sleep(toSub);
+        recursiveSleep(ms - toSub);
+    }
+    profileSectionEnd(recursiveSleep);
+}
+
 int
 main() {
     globalProfile.timeStart = __rdtsc();
@@ -451,6 +464,8 @@ main() {
 
         profileSectionEnd(parseAndCheck);
     }
+
+    recursiveSleep(100);
 
     profileEnd(arena, rdtscFrequencyPerSecond);
     return 0;
