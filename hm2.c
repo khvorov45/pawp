@@ -7,6 +7,14 @@
 #define STR(x) prb_STR(x)
 #define LIT(x) prb_LIT(x)
 
+#ifdef PAWP_PROFILE
+#define profileSectionBegin(name) TimedSection name##Section = profileSectionBegin_(STR(#name), __COUNTER__ + 1)
+#define profileSectionEnd(name) profileSectionEnd_(name##Section)
+#else
+#define profileSectionBegin(name)
+#define profileSectionEnd(name)
+#endif
+
 typedef intptr_t isize;
 typedef uint64_t u64;
 typedef float    f32;
@@ -39,7 +47,6 @@ typedef struct Profile {
 
 static Profile globalProfile;
 
-#define profileSectionBegin(name) TimedSection name##Section = profileSectionBegin_(STR(#name), __COUNTER__ + 1)
 function TimedSection
 profileSectionBegin_(Str name, isize index) {
     assert(index < PROFILE_ANCHOR_COUNT);
@@ -55,7 +62,6 @@ profileSectionBegin_(Str name, isize index) {
     return section;
 }
 
-#define profileSectionEnd(name) profileSectionEnd_(name##Section)
 function void
 profileSectionEnd_(TimedSection section) {
     ProfileAnchor* parent = globalProfile.anchors + section.parentIndex;

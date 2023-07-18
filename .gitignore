@@ -7,3 +7,4 @@
 .vscode
 *.json
 *.data
+compile_flags.txt
