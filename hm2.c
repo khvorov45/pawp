@@ -10,13 +10,17 @@
 #ifdef PAWP_PROFILE
 #define profileThroughputBegin(name, dataSize) TimedSection name##Section = profileThroughputBegin_(STR(#name), __COUNTER__ + 1, dataSize)
 #define profileThroughputEnd(name) profileThroughputEnd_(name##Section)
+#define profileThroughput(name, dataSize) profileThroughputBegin(name, dataSize); for (int _i_ = 0; _i_ == 0; _i_++, profileThroughputEnd(name))
 #define profileSectionBegin(name) profileThroughputBegin(name, 0)
 #define profileSectionEnd(name) profileThroughputEnd(name)
+#define profileSection(name) profileSectionBegin(name); for (int _i_ = 0; _i_ == 0; _i_++, profileSectionEnd(name))
 #else
 #define profileThroughputBegin(name, dataSize)
 #define profileThroughputEnd(name)
+#define profileThroughput(name, dataSize)
 #define profileSectionBegin(name)
 #define profileSectionEnd(name)
+#define profileSection(name)
 #endif
 
 typedef intptr_t isize;
@@ -359,76 +363,70 @@ main() {
     Input input = {};
     {
         isize pairCount = 1000000;
-        profileThroughputBegin(genInput, pairCount * sizeof(Pair));
+        profileThroughput(genInput, pairCount * sizeof(Pair)) {
+            isize seed = 8;
+            Pair* pairs = 0;
+            arrsetlen(pairs, pairCount);
+            arrsetlen(input.referenceHaversine, pairCount);
 
-        isize seed = 8;
-        Pair* pairs = 0;
-        arrsetlen(pairs, pairCount);
-        arrsetlen(input.referenceHaversine, pairCount);
+            prb_Rng rng = prb_createRng(seed);
 
-        prb_Rng rng = prb_createRng(seed);
+            f32 xmin = -180.0f;
+            f32 xrange = 360.0f;
+            f32 ymin = -90.0f;
+            f32 yrange = 180.0f;
 
-        f32 xmin = -180.0f;
-        f32 xrange = 360.0f;
-        f32 ymin = -90.0f;
-        f32 yrange = 180.0f;
-
-        bool sector = true;
-        if (sector) {
-            xmin = prb_randomF3201(&rng) * 180.0f - 180.0f;
-            xrange = randomFraction(&rng, 0.1) * 180.0f;
-            ymin = prb_randomF3201(&rng) * 90.0f - 90.0f;
-            yrange = randomFraction(&rng, 0.1) * 90.0f;
-        }
-
-        for (isize ind = 0; ind < pairCount; ind++) {
-            profileThroughputBegin(genPair, sizeof(Pair));
-
-            Pair pair = {
-                .x0 = prb_randomF3201(&rng) * xrange + xmin,
-                .x1 = prb_randomF3201(&rng) * xrange + xmin,
-                .y0 = prb_randomF3201(&rng) * yrange + ymin,
-                .y1 = prb_randomF3201(&rng) * yrange + ymin,
-            };
-
-            pairs[ind] = pair;
-
-            f64 haversine = ReferenceHaversine(pair.x0, pair.y0, pair.x1, pair.y1, earthRadius);
-            input.referenceHaversine[ind] = haversine;
-            input.expectedAverage += haversine / pairCount;
-
-            profileThroughputEnd(genPair);
-        }
-
-        GrowingStr builder = prb_beginStr(arena);
-        prb_addStrSegment(&builder, "{\"pairs\":[\n");
-
-        for (isize ind = 0; ind < pairCount; ind++) {
-            Pair pair = pairs[ind];
-            prb_addStrSegment(&builder, "    {\"x0\":%.16f, \"x1\":%.16f, \"y0\":%.16f, \"y1\":%.16f}", pair.x0, pair.x1, pair.y0, pair.y1);
-            if (ind < pairCount - 1) {
-                prb_addStrSegment(&builder, ",");
+            bool sector = true;
+            if (sector) {
+                xmin = prb_randomF3201(&rng) * 180.0f - 180.0f;
+                xrange = randomFraction(&rng, 0.1) * 180.0f;
+                ymin = prb_randomF3201(&rng) * 90.0f - 90.0f;
+                yrange = randomFraction(&rng, 0.1) * 90.0f;
             }
-            prb_addStrSegment(&builder, "\n");
+
+            for (isize ind = 0; ind < pairCount; ind++) {
+                profileThroughput(genPair, sizeof(Pair)) {
+                    Pair pair = {
+                        .x0 = prb_randomF3201(&rng) * xrange + xmin,
+                        .x1 = prb_randomF3201(&rng) * xrange + xmin,
+                        .y0 = prb_randomF3201(&rng) * yrange + ymin,
+                        .y1 = prb_randomF3201(&rng) * yrange + ymin,
+                    };
+
+                    pairs[ind] = pair;
+
+                    f64 haversine = ReferenceHaversine(pair.x0, pair.y0, pair.x1, pair.y1, earthRadius);
+                    input.referenceHaversine[ind] = haversine;
+                    input.expectedAverage += haversine / pairCount;
+                }
+            }
+
+            GrowingStr builder = prb_beginStr(arena);
+            prb_addStrSegment(&builder, "{\"pairs\":[\n");
+
+            for (isize ind = 0; ind < pairCount; ind++) {
+                Pair pair = pairs[ind];
+                prb_addStrSegment(&builder, "    {\"x0\":%.16f, \"x1\":%.16f, \"y0\":%.16f, \"y1\":%.16f}", pair.x0, pair.x1, pair.y0, pair.y1);
+                if (ind < pairCount - 1) {
+                    prb_addStrSegment(&builder, ",");
+                }
+                prb_addStrSegment(&builder, "\n");
+            }
+
+            prb_addStrSegment(&builder, "]}");
+            input.json = prb_endStr(&builder);
         }
-
-        prb_addStrSegment(&builder, "]}");
-        input.json = prb_endStr(&builder);
-
-        profileThroughputEnd(genInput);
     }
 
-    profileSectionBegin(writeInput);
-    prb_writeEntireFile(arena, prb_pathJoin(arena, rootDir, STR("input.json")), input.json.ptr, input.json.len);
-    profileSectionEnd(writeInput);
+    profileSection(writeInput) {
+        prb_writeEntireFile(arena, prb_pathJoin(arena, rootDir, STR("input.json")), input.json.ptr, input.json.len);
+    }
 
     if (true) {
         prb_writeToStdout(prb_fmt(arena, "Expected average: %f\n", input.expectedAverage));
     }
 
-    {
-        profileThroughputBegin(parseAndCheck, input.json.len);
-
+    profileThroughput(parseAndCheck, input.json.len) {
         JsonIter jsonIter = createJsonIter(input.json);
         expectTokenKind(&jsonIter, JsonTokenKind_CurlyOpen);
         expectString(&jsonIter, STR("pairs"));
@@ -482,8 +480,6 @@ main() {
         assert(absval(average - input.expectedAverage) < 0.00001);
         expectTokenKind(&jsonIter, JsonTokenKind_CurlyClose);
         assert(!jsonIterNext(&jsonIter));
-
-        profileThroughputEnd(parseAndCheck);
     }
 
     recursiveSleep(100);
