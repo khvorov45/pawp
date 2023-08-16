@@ -8,9 +8,13 @@
 #define LIT(x) prb_LIT(x)
 
 #ifdef PAWP_PROFILE
-#define profileSectionBegin(name) TimedSection name##Section = profileSectionBegin_(STR(#name), __COUNTER__ + 1)
-#define profileSectionEnd(name) profileSectionEnd_(name##Section)
+#define profileThroughputBegin(name, dataSize) TimedSection name##Section = profileThroughputBegin_(STR(#name), __COUNTER__ + 1, dataSize)
+#define profileThroughputEnd(name) profileThroughputEnd_(name##Section)
+#define profileSectionBegin(name) profileThroughputBegin(name, 0)
+#define profileSectionEnd(name) profileThroughputEnd(name)
 #else
+#define profileThroughputBegin(name, dataSize)
+#define profileThroughputEnd(name)
 #define profileSectionBegin(name)
 #define profileSectionEnd(name)
 #endif
@@ -29,6 +33,7 @@ typedef struct ProfileAnchor {
     u64   timeTakenSelf;
     u64   timeTakenWithChildren;
     isize count;
+    isize dataSize;
 } ProfileAnchor;
 
 typedef struct TimedSection {
@@ -48,10 +53,11 @@ typedef struct Profile {
 static Profile globalProfile;
 
 function TimedSection
-profileSectionBegin_(Str name, isize index) {
+profileThroughputBegin_(Str name, isize index, isize dataSize) {
     assert(index < PROFILE_ANCHOR_COUNT);
     ProfileAnchor* anchor = globalProfile.anchors + index;
     anchor->name = name;
+    anchor->dataSize += dataSize;
     TimedSection section = {
         __rdtsc(),
         anchor->timeTakenWithChildren,
@@ -63,7 +69,7 @@ profileSectionBegin_(Str name, isize index) {
 }
 
 function void
-profileSectionEnd_(TimedSection section) {
+profileThroughputEnd_(TimedSection section) {
     ProfileAnchor* parent = globalProfile.anchors + section.parentIndex;
     ProfileAnchor* anchor = globalProfile.anchors + section.anchorIndex;
     assert(anchor->name.ptr);
@@ -79,8 +85,8 @@ profileSectionEnd_(TimedSection section) {
 
 function void
 addTime(prb_GrowingStr* gstr, u64 total, u64 freqPerSec, u64 diff) {
-    double diffSec = (double)diff / (double)freqPerSec;
-    double prop = (double)diff / (double)total;
+    f64 diffSec = (f64)diff / (f64)freqPerSec;
+    f64 prop = (f64)diff / (f64)total;
     prb_addStrSegment(gstr, "%llu %.2gs %.2g%%", (unsigned long long)(diff), diffSec, prop * 100.0);
 }
 
@@ -107,9 +113,18 @@ profileEnd(Arena* arena, u64 rdtscFrequencyPerSecond) {
             prb_addStrSegment(&gstr, " x%lld avg for 1: ", (long long)anchor->count);
             addTime(&gstr, total, rdtscFrequencyPerSecond, anchor->timeTakenWithChildren / anchor->count);
         }
+        if (anchor->dataSize > 0) {
+            f64 seconds = (f64)anchor->timeTakenWithChildren / (f64)rdtscFrequencyPerSecond;
+            f64 MB = 1024 * 1024;
+            f64 GB = MB * 1024;
+            f64 dataSizeMB = (f64)anchor->dataSize / MB;
+            f64 dataSizeGB = (f64)anchor->dataSize / GB;
+            f64 gbPerSec = dataSizeGB / seconds;
+            prb_addStrSegment(&gstr, " data: %.2fMB, throughput: %.2fgb/s", dataSizeMB, gbPerSec);
+        }
         prb_addStrSegment(&gstr, "\n");
     }
-    prb_addStrSegment(&gstr, "total: %llu %.2gs\n", (unsigned long long)total, (double)total / (double)rdtscFrequencyPerSecond);
+    prb_addStrSegment(&gstr, "total: %llu %.2gs\n", (unsigned long long)total, (f64)total / (f64)rdtscFrequencyPerSecond);
     Str msg = prb_endStr(&gstr);
     prb_writeToStdout(msg);
 }
@@ -343,10 +358,10 @@ main() {
 
     Input input = {};
     {
-        profileSectionBegin(genInput);
+        isize pairCount = 1000000;
+        profileThroughputBegin(genInput, pairCount * sizeof(Pair));
 
         isize seed = 8;
-        isize pairCount = 1000000;
         Pair* pairs = 0;
         arrsetlen(pairs, pairCount);
         arrsetlen(input.referenceHaversine, pairCount);
@@ -367,7 +382,7 @@ main() {
         }
 
         for (isize ind = 0; ind < pairCount; ind++) {
-            profileSectionBegin(genPair);
+            profileThroughputBegin(genPair, sizeof(Pair));
 
             Pair pair = {
                 .x0 = prb_randomF3201(&rng) * xrange + xmin,
@@ -382,7 +397,7 @@ main() {
             input.referenceHaversine[ind] = haversine;
             input.expectedAverage += haversine / pairCount;
 
-            profileSectionEnd(genPair);
+            profileThroughputEnd(genPair);
         }
 
         GrowingStr builder = prb_beginStr(arena);
@@ -400,7 +415,7 @@ main() {
         prb_addStrSegment(&builder, "]}");
         input.json = prb_endStr(&builder);
 
-        profileSectionEnd(genInput);
+        profileThroughputEnd(genInput);
     }
 
     profileSectionBegin(writeInput);
@@ -412,7 +427,7 @@ main() {
     }
 
     {
-        profileSectionBegin(parseAndCheck);
+        profileThroughputBegin(parseAndCheck, input.json.len);
 
         JsonIter jsonIter = createJsonIter(input.json);
         expectTokenKind(&jsonIter, JsonTokenKind_CurlyOpen);
@@ -468,7 +483,7 @@ main() {
         expectTokenKind(&jsonIter, JsonTokenKind_CurlyClose);
         assert(!jsonIterNext(&jsonIter));
 
-        profileSectionEnd(parseAndCheck);
+        profileThroughputEnd(parseAndCheck);
     }
 
     recursiveSleep(100);
