@@ -331,6 +331,78 @@ recursiveSleep(f32 ms) {
     profileSectionEnd(recursiveSleep);
 }
 
+typedef struct RepetitionTester {
+    Arena* arena;
+    u64 freqPerSec;
+    u64 toWait;
+    u64 expectedSize;
+
+    u64 minDiff;
+    u64 maxDiff;
+
+    u64 diffSum;
+    u64 diffCount;
+
+    u64 lastBegin;
+    u64 waited;
+} RepetitionTester;
+
+function void
+repeatBeginTime(RepetitionTester* tester) {
+    tester->lastBegin = __rdtsc();
+}
+
+function void
+repeatEndTime(RepetitionTester* tester) {
+    u64 time = __rdtsc();
+    u64 diff = time - tester->lastBegin;
+    if (diff < tester->minDiff) {
+        tester->minDiff = diff;
+        tester->waited = 0;
+    } else {
+        tester->waited += diff;
+    }
+    if (diff > tester->maxDiff) {
+        tester->maxDiff = diff;
+    }
+
+    tester->diffSum += diff;
+    tester->diffCount += 1;
+}
+
+function bool
+repeatShouldStop(RepetitionTester* tester) {
+    bool result = tester->waited >= tester->toWait;
+    return result;
+}
+
+function void
+repeatTestReadFile(RepetitionTester* tester) {
+    while (!repeatShouldStop(tester)) {
+        prb_TempMemory temp = prb_beginTempMemory(tester->arena);
+
+        repeatBeginTime(tester);
+        prb_ReadEntireFileResult result = prb_readEntireFile(tester->arena, STR("input.json"));
+        repeatEndTime(tester);
+
+        assert(result.success);
+        assert(tester->expectedSize == (u64)result.content.len);
+        prb_endTempMemory(temp);
+    }
+}
+
+function void
+repeatPrint(RepetitionTester* tester) {
+    f64 minSec = (f64)tester->minDiff / (f64)tester->freqPerSec;
+    f64 maxSec = (f64)tester->maxDiff / (f64)tester->freqPerSec;
+
+    f64 sizeGB = (f64)tester->expectedSize / (1024.0 * 1024.0 * 1024.0);
+    f64 minBand = sizeGB / minSec;
+    f64 maxBand = sizeGB / maxSec;
+
+    prb_writeToStdout(prb_fmt(tester->arena, "repeat: min: %.2gs %.2ggb/s, max: %.2gs %.2ggb/s\n", minSec, minBand, maxSec, maxBand));
+}
+
 int
 main() {
     globalProfile.timeStart = __rdtsc();
@@ -426,6 +498,14 @@ main() {
         prb_writeToStdout(prb_fmt(arena, "Expected average: %f\n", input.expectedAverage));
     }
 
+    profileThroughput(ReadInput, input.json.len) {
+        prb_TempMemory temp = prb_beginTempMemory(arena);
+        prb_ReadEntireFileResult result = prb_readEntireFile(arena, STR("input.json"));
+        assert(result.success);
+        assert(input.json.len == result.content.len);
+        prb_endTempMemory(temp);
+    }
+
     profileThroughput(parseAndCheck, input.json.len) {
         JsonIter jsonIter = createJsonIter(input.json);
         expectTokenKind(&jsonIter, JsonTokenKind_CurlyOpen);
@@ -485,5 +565,10 @@ main() {
     recursiveSleep(100);
 
     profileEnd(arena, rdtscFrequencyPerSecond);
+
+    RepetitionTester tester = {.arena = arena, .freqPerSec = rdtscFrequencyPerSecond, .toWait = rdtscFrequencyPerSecond, .expectedSize = input.json.len, .minDiff = UINT64_MAX};
+    repeatTestReadFile(&tester);
+    repeatPrint(&tester);
+
     return 0;
 }
