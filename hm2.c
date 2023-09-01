@@ -428,6 +428,46 @@ main() {
         profileSectionEnd(getRdtscFreq);
     }
 
+    // NOTE(khvorov) Create some pagefaults
+    if (false) {
+        u64 size = 100 * prb_MEGABYTE;
+        f32 toWaitMs = 5000;
+        for (;;) {
+            prb_TempMemory temp = prb_beginTempMemory(arena);
+
+            prb_writeToStdout(STR("allocAndSet\n"));
+            u64 allocAndSetMin = UINT64_MAX;
+            for (prb_TimeStart start = prb_timeStart(); prb_getMsFrom(start) < toWaitMs;) {
+                void* mem = prb_vmemAlloc(size);
+                u64 start = __rdtsc();
+                prb_memset(mem, 0, size);
+                u64 end = __rdtsc();
+                prb_assert(VirtualFree(mem, size, MEM_DECOMMIT));
+                allocAndSetMin = prb_min(allocAndSetMin, end - start);
+            }
+
+            prb_writeToStdout(STR("preallocAndSet\n"));
+            u64 preallocAndSetMin = UINT64_MAX;
+            void* mem = prb_vmemAlloc(size);
+            for (prb_TimeStart start = prb_timeStart(); prb_getMsFrom(start) < toWaitMs;) {
+                u64 start = __rdtsc();
+                prb_memset(mem, 0, size);
+                u64 end = __rdtsc();
+                preallocAndSetMin = prb_min(preallocAndSetMin, end - start);
+            }
+            prb_assert(VirtualFree(mem, size, MEM_DECOMMIT));
+
+            f64 allocAndSetSec = (f64)allocAndSetMin / (f64)rdtscFrequencyPerSecond;
+            f64 preallocAndSetSec = (f64)preallocAndSetMin / (f64)rdtscFrequencyPerSecond;
+            f64 allocAndSetBandwidth = (f64)size / allocAndSetSec / (f64)(prb_GIGABYTE);
+            f64 preallocAndSetBandwidth = (f64)size / preallocAndSetSec / (f64)(prb_GIGABYTE);
+
+            prb_writeToStdout(prb_fmt(arena, "allocAndSetSec: %.2gms (%.2ggb/s) preallocAndSetSec: %.2gms (%.2ggb/s)\n", allocAndSetSec * 1000.0f, allocAndSetBandwidth, preallocAndSetSec * 1000.0f, preallocAndSetBandwidth));
+
+            prb_endTempMemory(temp);
+        }
+    }
+
     Str rootDir = prb_getParentDir(arena, STR(__FILE__));
 
     f64 earthRadius = 6372.8;
