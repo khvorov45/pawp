@@ -403,6 +403,8 @@ repeatPrint(RepetitionTester* tester) {
     prb_writeToStdout(prb_fmt(tester->arena, "repeat: min: %.2gs %.2ggb/s, max: %.2gs %.2ggb/s\n", minSec, minBand, maxSec, maxBand));
 }
 
+#include <psapi.h>
+
 int
 main() {
     globalProfile.timeStart = __rdtsc();
@@ -429,11 +431,19 @@ main() {
     }
 
     // NOTE(khvorov) Create some pagefaults
-    if (false) {
+    if (true) {
         u64 size = 100 * prb_MEGABYTE;
         f32 toWaitMs = 5000;
+        HANDLE process = OpenProcess(PROCESS_QUERY_INFORMATION  | PROCESS_VM_READ, FALSE, GetCurrentProcessId());
+        prb_assert(process);
         for (;;) {
             prb_TempMemory temp = prb_beginTempMemory(arena);
+            
+            PROCESS_MEMORY_COUNTERS beforeMemCounters = {};
+            {
+                BOOL GetProcessMemoryInfoResult = GetProcessMemoryInfo(process, &beforeMemCounters, sizeof(beforeMemCounters));
+                assert(GetProcessMemoryInfoResult);
+            }
 
             prb_writeToStdout(STR("allocAndSet\n"));
             u64 allocAndSetMin = UINT64_MAX;
@@ -444,6 +454,12 @@ main() {
                 u64 end = __rdtsc();
                 prb_assert(VirtualFree(mem, size, MEM_DECOMMIT));
                 allocAndSetMin = prb_min(allocAndSetMin, end - start);
+            }
+            
+            PROCESS_MEMORY_COUNTERS allocAndSetMemCounters = {};
+            {
+                BOOL GetProcessMemoryInfoResult = GetProcessMemoryInfo(process, &allocAndSetMemCounters, sizeof(allocAndSetMemCounters));
+                assert(GetProcessMemoryInfoResult);
             }
 
             prb_writeToStdout(STR("preallocAndSet\n"));
@@ -456,17 +472,31 @@ main() {
                 preallocAndSetMin = prb_min(preallocAndSetMin, end - start);
             }
             prb_assert(VirtualFree(mem, size, MEM_DECOMMIT));
+            
+            PROCESS_MEMORY_COUNTERS preallocAndSetMemCounters = {};
+            {
+                BOOL GetProcessMemoryInfoResult = GetProcessMemoryInfo(process, &preallocAndSetMemCounters, sizeof(preallocAndSetMemCounters));
+                assert(GetProcessMemoryInfoResult);
+            }
 
             f64 allocAndSetSec = (f64)allocAndSetMin / (f64)rdtscFrequencyPerSecond;
             f64 preallocAndSetSec = (f64)preallocAndSetMin / (f64)rdtscFrequencyPerSecond;
             f64 allocAndSetBandwidth = (f64)size / allocAndSetSec / (f64)(prb_GIGABYTE);
             f64 preallocAndSetBandwidth = (f64)size / preallocAndSetSec / (f64)(prb_GIGABYTE);
+            f64 allocAndSetPFRate = (f64)(allocAndSetMemCounters.PageFaultCount - beforeMemCounters.PageFaultCount) / (f64)size / (f64)(prb_KILOBYTE);
+            f64 preallocAndSetPFRate = (f64)(preallocAndSetMemCounters.PageFaultCount - allocAndSetMemCounters.PageFaultCount) / (f64)size / (f64)(prb_KILOBYTE);
 
-            prb_writeToStdout(prb_fmt(arena, "allocAndSetSec: %.2gms (%.2ggb/s) preallocAndSetSec: %.2gms (%.2ggb/s)\n", allocAndSetSec * 1000.0f, allocAndSetBandwidth, preallocAndSetSec * 1000.0f, preallocAndSetBandwidth));
+            prb_writeToStdout(prb_fmt(arena, 
+                "allocAndSetSec: %.2gms (%.2ggb/s) %.2gPF/kb preallocAndSetSec: %.2gms (%.2ggb/s) %.2gPF/kb\n", 
+                allocAndSetSec * 1000.0f, allocAndSetBandwidth, allocAndSetPFRate,
+                preallocAndSetSec * 1000.0f, preallocAndSetBandwidth, preallocAndSetPFRate
+            ));
 
             prb_endTempMemory(temp);
+            break;
         }
     }
+    ExitProcess(0);
 
     Str rootDir = prb_getParentDir(arena, STR(__FILE__));
 
