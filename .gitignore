@@ -9,3 +9,4 @@
 *.data
 compile_flags.txt
 *.rdbg
+*.csv

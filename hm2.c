@@ -1,6 +1,9 @@
 #include "cbuild.h"
 #include "math.h"
 
+#include <psapi.h>
+
+
 #define function static
 #define assert(x) prb_assert(x)
 #define absval(x) ((x) < 0 ? -(x) : (x))
@@ -332,42 +335,68 @@ recursiveSleep(f32 ms) {
 }
 
 typedef struct RepetitionTester {
-    Arena* arena;
     u64 freqPerSec;
     u64 toWait;
     u64 expectedSize;
 
-    u64 minDiff;
-    u64 maxDiff;
+    u64 minDiffTime;
+    u64 maxDiffTime;
+    u64 diffTimeSum;
 
-    u64 diffSum;
+    u64 minDiffPF;
+    u64 maxDiffPF;
+
     u64 diffCount;
 
     u64 lastBegin;
+    PROCESS_MEMORY_COUNTERS lastCounters;
+
     u64 waited;
+
+    HANDLE process;
 } RepetitionTester;
+
+function RepetitionTester
+createRepetitionTester(u64 freqPerSec, u64 expectedSize) {
+    RepetitionTester tester = {
+        .freqPerSec = freqPerSec, .toWait = freqPerSec, .expectedSize = expectedSize, .minDiffTime = UINT64_MAX, .minDiffPF = UINT64_MAX,
+        .process = OpenProcess(PROCESS_QUERY_INFORMATION  | PROCESS_VM_READ, FALSE, GetCurrentProcessId())
+    };
+    prb_assert(tester.process);
+    return tester;
+}
 
 function void
 repeatBeginTime(RepetitionTester* tester) {
     tester->lastBegin = __rdtsc();
+    BOOL GetProcessMemoryInfoResult = GetProcessMemoryInfo(tester->process, &tester->lastCounters, sizeof(tester->lastCounters));
+    assert(GetProcessMemoryInfoResult);
 }
 
 function void
 repeatEndTime(RepetitionTester* tester) {
     u64 time = __rdtsc();
-    u64 diff = time - tester->lastBegin;
-    if (diff < tester->minDiff) {
-        tester->minDiff = diff;
+    u64 diffTime = time - tester->lastBegin;
+    if (diffTime < tester->minDiffTime) {
+        tester->minDiffTime = diffTime;
         tester->waited = 0;
     } else {
-        tester->waited += diff;
+        tester->waited += diffTime;
     }
-    if (diff > tester->maxDiff) {
-        tester->maxDiff = diff;
+    if (diffTime > tester->maxDiffTime) {
+        tester->maxDiffTime = diffTime;
     }
 
-    tester->diffSum += diff;
+    tester->diffTimeSum += diffTime;
     tester->diffCount += 1;
+
+    PROCESS_MEMORY_COUNTERS counters = {};
+    BOOL GetProcessMemoryInfoResult = GetProcessMemoryInfo(tester->process, &counters, sizeof(counters));
+    assert(GetProcessMemoryInfoResult);
+
+    u64 diffPF = counters.PageFaultCount - tester->lastCounters.PageFaultCount;
+    tester->minDiffPF = prb_min(tester->minDiffPF, diffPF);
+    tester->maxDiffPF = prb_max(tester->maxDiffPF, diffPF);
 }
 
 function bool
@@ -377,12 +406,12 @@ repeatShouldStop(RepetitionTester* tester) {
 }
 
 function void
-repeatTestReadFile(RepetitionTester* tester) {
+repeatTestReadFile(Arena* arena, RepetitionTester* tester) {
     while (!repeatShouldStop(tester)) {
-        prb_TempMemory temp = prb_beginTempMemory(tester->arena);
+        prb_TempMemory temp = prb_beginTempMemory(arena);
 
         repeatBeginTime(tester);
-        prb_ReadEntireFileResult result = prb_readEntireFile(tester->arena, STR("input.json"));
+        prb_ReadEntireFileResult result = prb_readEntireFile(arena, STR("input.json"));
         repeatEndTime(tester);
 
         assert(result.success);
@@ -392,18 +421,23 @@ repeatTestReadFile(RepetitionTester* tester) {
 }
 
 function void
-repeatPrint(RepetitionTester* tester) {
-    f64 minSec = (f64)tester->minDiff / (f64)tester->freqPerSec;
-    f64 maxSec = (f64)tester->maxDiff / (f64)tester->freqPerSec;
+repeatPrint(Arena* arena, RepetitionTester* tester) {
+    f64 minSec = (f64)tester->minDiffTime / (f64)tester->freqPerSec;
+    f64 maxSec = (f64)tester->maxDiffTime / (f64)tester->freqPerSec;
 
     f64 sizeGB = (f64)tester->expectedSize / (1024.0 * 1024.0 * 1024.0);
     f64 minBand = sizeGB / minSec;
     f64 maxBand = sizeGB / maxSec;
 
-    prb_writeToStdout(prb_fmt(tester->arena, "repeat: min: %.2gs %.2ggb/s, max: %.2gs %.2ggb/s\n", minSec, minBand, maxSec, maxBand));
-}
+    f64 sizeKB = (f64)tester->expectedSize / (1024.0);
+    f64 minKBPerPF = sizeKB / (f64)tester->minDiffPF;
+    f64 maxKBPerPF = sizeKB / (f64)tester->maxDiffPF;
 
-#include <psapi.h>
+    prb_writeToStdout(prb_fmt(arena,
+        "repeat: min: %.2gs %.2ggb/s %lluPF %.2gKB/PF, max: %.2gs %.2ggb/s %lluPF %.2gKB/PF\n",
+        minSec, minBand, tester->minDiffPF, minKBPerPF, maxSec, maxBand, tester->maxDiffPF, maxKBPerPF
+    ));
+}
 
 int
 main() {
@@ -433,64 +467,68 @@ main() {
     // NOTE(khvorov) Create some pagefaults
     if (true) {
         u64 size = 100 * prb_MEGABYTE;
-        f32 toWaitMs = 5000;
-        HANDLE process = OpenProcess(PROCESS_QUERY_INFORMATION  | PROCESS_VM_READ, FALSE, GetCurrentProcessId());
-        prb_assert(process);
+
         for (;;) {
             prb_TempMemory temp = prb_beginTempMemory(arena);
-            
-            PROCESS_MEMORY_COUNTERS beforeMemCounters = {};
-            {
-                BOOL GetProcessMemoryInfoResult = GetProcessMemoryInfo(process, &beforeMemCounters, sizeof(beforeMemCounters));
-                assert(GetProcessMemoryInfoResult);
+
+            if (false) {
+                RepetitionTester tester = createRepetitionTester(rdtscFrequencyPerSecond, size);
+                while (!repeatShouldStop(&tester)) {
+                    void* mem = prb_vmemAlloc(size);
+                    repeatBeginTime(&tester);
+                    prb_memset(mem, 0, size);
+                    repeatEndTime(&tester);
+                    prb_assert(VirtualFree(mem, size, MEM_DECOMMIT));
+                }
+                repeatPrint(arena, &tester);
             }
 
-            prb_writeToStdout(STR("allocAndSet\n"));
-            u64 allocAndSetMin = UINT64_MAX;
-            for (prb_TimeStart start = prb_timeStart(); prb_getMsFrom(start) < toWaitMs;) {
+            if (false) {
+                RepetitionTester tester = createRepetitionTester(rdtscFrequencyPerSecond, size);
                 void* mem = prb_vmemAlloc(size);
-                u64 start = __rdtsc();
                 prb_memset(mem, 0, size);
-                u64 end = __rdtsc();
+                while (!repeatShouldStop(&tester)) {
+                    repeatBeginTime(&tester);
+                    prb_memset(mem, 0, size);
+                    repeatEndTime(&tester);
+                }
                 prb_assert(VirtualFree(mem, size, MEM_DECOMMIT));
-                allocAndSetMin = prb_min(allocAndSetMin, end - start);
+                repeatPrint(arena, &tester);
             }
             
-            PROCESS_MEMORY_COUNTERS allocAndSetMemCounters = {};
-            {
-                BOOL GetProcessMemoryInfoResult = GetProcessMemoryInfo(process, &allocAndSetMemCounters, sizeof(allocAndSetMemCounters));
-                assert(GetProcessMemoryInfoResult);
+            if (false) {
+                prb_GrowingStr gstr = prb_beginStr(arena);
+                prb_addStrSegment(&gstr, "touched,pfs\n");
+                for (u64 toTouch = 0; toTouch < 4096; toTouch++) {
+                    uint8_t* mem = prb_vmemAlloc(size);
+                    RepetitionTester tester = createRepetitionTester(rdtscFrequencyPerSecond, size);
+                    repeatBeginTime(&tester);
+                    prb_memset(mem, 0, toTouch * 4 * prb_KILOBYTE);
+                    repeatEndTime(&tester);
+                    prb_assert(VirtualFree(mem, size, MEM_DECOMMIT));
+                    prb_addStrSegment(&gstr, "%llu,%llu\n", toTouch, tester.minDiffPF);
+                }
+                prb_Str csv = prb_endStr(&gstr);
+                prb_writeEntireFile(arena, prb_STR("pf-forward.csv"), csv.ptr, csv.len);
             }
-
-            prb_writeToStdout(STR("preallocAndSet\n"));
-            u64 preallocAndSetMin = UINT64_MAX;
-            void* mem = prb_vmemAlloc(size);
-            for (prb_TimeStart start = prb_timeStart(); prb_getMsFrom(start) < toWaitMs;) {
-                u64 start = __rdtsc();
-                prb_memset(mem, 0, size);
-                u64 end = __rdtsc();
-                preallocAndSetMin = prb_min(preallocAndSetMin, end - start);
-            }
-            prb_assert(VirtualFree(mem, size, MEM_DECOMMIT));
             
-            PROCESS_MEMORY_COUNTERS preallocAndSetMemCounters = {};
             {
-                BOOL GetProcessMemoryInfoResult = GetProcessMemoryInfo(process, &preallocAndSetMemCounters, sizeof(preallocAndSetMemCounters));
-                assert(GetProcessMemoryInfoResult);
+                prb_GrowingStr gstr = prb_beginStr(arena);
+                prb_addStrSegment(&gstr, "touched,pfs\n");
+                for (u64 toTouch = 0; toTouch < 4096; toTouch++) {
+                    uint8_t* mem = prb_vmemAlloc(size);
+                    RepetitionTester tester = createRepetitionTester(rdtscFrequencyPerSecond, size);
+                    repeatBeginTime(&tester);
+                    for (u64 pageIndex = 0; pageIndex < toTouch; pageIndex++) {
+                        prb_memset(mem + ((toTouch - pageIndex - 1) * 4 * prb_KILOBYTE), 0, 4 * prb_KILOBYTE);
+                    }
+                    repeatEndTime(&tester);
+                    prb_assert(VirtualFree(mem, size, MEM_DECOMMIT));
+                    prb_addStrSegment(&gstr, "%llu,%llu\n", toTouch, tester.minDiffPF);
+                }
+                prb_Str csv = prb_endStr(&gstr);
+                prb_writeEntireFile(arena, prb_STR("pf-backward.csv"), csv.ptr, csv.len);
             }
-
-            f64 allocAndSetSec = (f64)allocAndSetMin / (f64)rdtscFrequencyPerSecond;
-            f64 preallocAndSetSec = (f64)preallocAndSetMin / (f64)rdtscFrequencyPerSecond;
-            f64 allocAndSetBandwidth = (f64)size / allocAndSetSec / (f64)(prb_GIGABYTE);
-            f64 preallocAndSetBandwidth = (f64)size / preallocAndSetSec / (f64)(prb_GIGABYTE);
-            f64 allocAndSetPFRate = (f64)(allocAndSetMemCounters.PageFaultCount - beforeMemCounters.PageFaultCount) / (f64)size / (f64)(prb_KILOBYTE);
-            f64 preallocAndSetPFRate = (f64)(preallocAndSetMemCounters.PageFaultCount - allocAndSetMemCounters.PageFaultCount) / (f64)size / (f64)(prb_KILOBYTE);
-
-            prb_writeToStdout(prb_fmt(arena, 
-                "allocAndSetSec: %.2gms (%.2ggb/s) %.2gPF/kb preallocAndSetSec: %.2gms (%.2ggb/s) %.2gPF/kb\n", 
-                allocAndSetSec * 1000.0f, allocAndSetBandwidth, allocAndSetPFRate,
-                preallocAndSetSec * 1000.0f, preallocAndSetBandwidth, preallocAndSetPFRate
-            ));
 
             prb_endTempMemory(temp);
             break;
@@ -636,9 +674,9 @@ main() {
 
     profileEnd(arena, rdtscFrequencyPerSecond);
 
-    RepetitionTester tester = {.arena = arena, .freqPerSec = rdtscFrequencyPerSecond, .toWait = rdtscFrequencyPerSecond, .expectedSize = input.json.len, .minDiff = UINT64_MAX};
-    repeatTestReadFile(&tester);
-    repeatPrint(&tester);
+    RepetitionTester tester = createRepetitionTester(rdtscFrequencyPerSecond, input.json.len);
+    repeatTestReadFile(arena, &tester);
+    repeatPrint(arena, &tester);
 
     return 0;
 }
