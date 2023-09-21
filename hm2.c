@@ -496,9 +496,9 @@ main() {
                 repeatPrint(arena, &tester);
             }
             
-            if (false) {
+            if (true) {
                 prb_GrowingStr gstr = prb_beginStr(arena);
-                prb_addStrSegment(&gstr, "touched,pfs\n");
+                prb_addStrSegment(&gstr, "touched,pfs,t1,t2,t3,t4,offset\n");
                 for (u64 toTouch = 0; toTouch < 4096; toTouch++) {
                     uint8_t* mem = prb_vmemAlloc(size);
                     RepetitionTester tester = createRepetitionTester(rdtscFrequencyPerSecond, size);
@@ -506,13 +506,20 @@ main() {
                     prb_memset(mem, 0, toTouch * 4 * prb_KILOBYTE);
                     repeatEndTime(&tester);
                     prb_assert(VirtualFree(mem, size, MEM_DECOMMIT));
-                    prb_addStrSegment(&gstr, "%llu,%llu\n", toTouch, tester.minDiffPF);
+                    prb_assert(((u64)mem & 0xFFFF000000000000ULL) == 0);
+                    uint16_t t1 = ((u64)mem >> (9 * 3 + 12));
+                    uint16_t t2 = ((u64)mem >> (9 * 2 + 12)) & 0x1FF;
+                    uint16_t t3 = ((u64)mem >> (9 + 12)) & 0x1FF;
+                    uint16_t t4 = ((u64)mem >> 12) & 0x1FF;
+                    uint16_t offset = (u64)mem & 0xFFF;
+
+                    prb_addStrSegment(&gstr, "%llu,%llu,%d,%d,%d,%d,%d\n", toTouch, tester.minDiffPF, t1, t2, t3, t4, offset);
                 }
                 prb_Str csv = prb_endStr(&gstr);
                 prb_writeEntireFile(arena, prb_STR("pf-forward.csv"), csv.ptr, csv.len);
             }
             
-            {
+            if (false) {
                 prb_GrowingStr gstr = prb_beginStr(arena);
                 prb_addStrSegment(&gstr, "touched,pfs\n");
                 for (u64 toTouch = 0; toTouch < 4096; toTouch++) {
