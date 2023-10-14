@@ -74,9 +74,8 @@ static void endTempMemory(TempMemory* mem) {
 }
 
 #ifdef PAWP_PROFILE
-#define profileThroughputBegin(name, dataSize) TimedSection name##Section = profileThroughputBegin_(STR(#name), __COUNTER__ + 1, dataSize)
-#define profileThroughputEnd(name) profileThroughputEnd_(name##Section)
-#define profileThroughput(name, dataSize) profileThroughputBegin(name, dataSize); for (int _i_ = 0; _i_ == 0; _i_++, profileThroughputEnd(name))
+#define profileThroughputBegin(name, dataSize) profileThroughputBegin_(STR(name), __COUNTER__ + 1, dataSize)
+#define profileThroughput(name, dataSize) for (TimedSection __timedSection__ = profileThroughputBegin(name, dataSize); __timedSection__.anchorIndex; profileThroughputEnd(&__timedSection__))
 #define profileSectionBegin(name) profileThroughputBegin(name, 0)
 #define profileSectionEnd(name) profileThroughputEnd(name)
 #define profileSection(name) profileSectionBegin(name); for (int _i_ = 0; _i_ == 0; _i_++, profileSectionEnd(name))
@@ -128,18 +127,19 @@ static TimedSection profileThroughputBegin_(Str name, i64 index, i64 dataSize) {
     return section;
 }
 
-static void profileThroughputEnd_(TimedSection section) {
-    ProfileAnchor* parent = globalProfile.anchors + section.parentIndex;
-    ProfileAnchor* anchor = globalProfile.anchors + section.anchorIndex;
+static void profileThroughputEnd(TimedSection* section) {
+    ProfileAnchor* parent = globalProfile.anchors + section->parentIndex;
+    ProfileAnchor* anchor = globalProfile.anchors + section->anchorIndex;
     assert(anchor->name.ptr);
     anchor->count += 1;
 
-    u64 diff = __rdtsc() - section.timeBegin;
+    u64 diff = __rdtsc() - section->timeBegin;
     anchor->timeTakenSelf += diff;
-    anchor->timeTakenWithChildren = section.oldTimeWithChildren + diff;
+    anchor->timeTakenWithChildren = section->oldTimeWithChildren + diff;
     parent->timeTakenSelf -= diff;
 
-    globalProfile.currentOpenIndex = section.parentIndex;
+    globalProfile.currentOpenIndex = section->parentIndex;
+    *section = (TimedSection) {};
 }
 
 static void addTime(StrBuilder* gstr, u64 total, u64 freqPerSec, u64 diff) {
@@ -425,7 +425,7 @@ int main() {
 
     tempMemBlock(arena) {
         OpenedFile openedInputFile = openFile(inputPath);
-        profileThroughput(readinput, openedInputFile.size) {
+        profileThroughput("read input", openedInputFile.size) {
             u8arr inputContent = readEntireFile(arena, openedInputFile);
         }
     }
