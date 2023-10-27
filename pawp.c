@@ -279,8 +279,99 @@ static f64 haversineDistance(f64 X0, f64 Y0, f64 X1, f64 Y1, f64 EarthRadius) {
 typedef struct Pair { f64 x0, y0, x1, y1; } Pair;
 
 #include <windows.h>
+#include <psapi.h>
 
 #pragma comment(lib, "advapi32")
+
+typedef struct RepetitionTester {
+    u64 freqPerSec;
+    u64 toWait;
+    u64 expectedSize;
+
+    u64 minDiffTime;
+    u64 maxDiffTime;
+    u64 diffTimeSum;
+
+    u64 minDiffPF;
+    u64 maxDiffPF;
+
+    u64 diffCount;
+
+    u64 lastBegin;
+    PROCESS_MEMORY_COUNTERS lastCounters;
+
+    u64 waited;
+
+    HANDLE process;
+} RepetitionTester;
+
+static RepetitionTester
+createRepetitionTester(u64 freqPerSec, u64 expectedSize) {
+    RepetitionTester tester = {
+        .freqPerSec = freqPerSec, .toWait = freqPerSec, .expectedSize = expectedSize, .minDiffTime = UINT64_MAX, .minDiffPF = UINT64_MAX,
+        .process = OpenProcess(PROCESS_QUERY_INFORMATION  | PROCESS_VM_READ, FALSE, GetCurrentProcessId())
+    };
+    assert(tester.process);
+    return tester;
+}
+
+static void
+repeatBeginTime(RepetitionTester* tester) {
+    tester->lastBegin = __rdtsc();
+    BOOL GetProcessMemoryInfoResult = GetProcessMemoryInfo(tester->process, &tester->lastCounters, sizeof(tester->lastCounters));
+    assert(GetProcessMemoryInfoResult);
+}
+
+static void
+repeatEndTime(RepetitionTester* tester) {
+    u64 time = __rdtsc();
+    u64 diffTime = time - tester->lastBegin;
+    if (diffTime < tester->minDiffTime) {
+        tester->minDiffTime = diffTime;
+        tester->waited = 0;
+    } else {
+        tester->waited += diffTime;
+    }
+    if (diffTime > tester->maxDiffTime) {
+        tester->maxDiffTime = diffTime;
+    }
+
+    tester->diffTimeSum += diffTime;
+    tester->diffCount += 1;
+
+    PROCESS_MEMORY_COUNTERS counters = {};
+    BOOL GetProcessMemoryInfoResult = GetProcessMemoryInfo(tester->process, &counters, sizeof(counters));
+    assert(GetProcessMemoryInfoResult);
+
+    u64 diffPF = counters.PageFaultCount - tester->lastCounters.PageFaultCount;
+    tester->minDiffPF = min(tester->minDiffPF, diffPF);
+    tester->maxDiffPF = max(tester->maxDiffPF, diffPF);
+}
+
+static bool
+repeatShouldStop(RepetitionTester* tester) {
+    bool result = tester->waited >= tester->toWait;
+    return result;
+}
+
+static void
+repeatPrint(RepetitionTester* tester) {
+    f64 minSec = (f64)tester->minDiffTime / (f64)tester->freqPerSec;
+    f64 maxSec = (f64)tester->maxDiffTime / (f64)tester->freqPerSec;
+
+    f64 sizeGB = (f64)tester->expectedSize / (1024.0 * 1024.0 * 1024.0);
+    f64 minBand = sizeGB / minSec;
+    f64 maxBand = sizeGB / maxSec;
+
+    f64 sizeKB = (f64)tester->expectedSize / (1024.0);
+    f64 minKBPerPF = sizeKB / (f64)tester->minDiffPF;
+    f64 maxKBPerPF = sizeKB / (f64)tester->maxDiffPF;
+
+    printf(
+        "repeat: min: %.2gs %.2ggb/s %lluPF %.2gKB/PF, max: %.2gs %.2ggb/s %lluPF %.2gKB/PF\n",
+        minSec, minBand, tester->minDiffPF, minKBPerPF, maxSec, maxBand, tester->maxDiffPF, maxKBPerPF
+    );
+}
 
 static void writeEntireFile(char* path, void* content, i64 contentLen) {
     HANDLE handle = CreateFileA(path, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
@@ -307,7 +398,7 @@ static OpenedFile openFile(char* path) {
     return result;
 }
 
-static u8arr readEntireFile(Arena* arena, OpenedFile file) {
+static u8arr readAndCloseFile(Arena* arena, OpenedFile file) {
     u8arr result = {.len = file.size};
     result.ptr = arenaAllocArray(arena, u8, result.len);
     DWORD bytesRead = 0;
@@ -423,10 +514,30 @@ int main() {
         // TODO(khvorov) Write out reference values as well I guess
     }
 
+    bool repeatTestReadFile = true;
+    if (repeatTestReadFile) {
+        OpenedFile openedInputFile = openFile(inputPath);
+        RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, openedInputFile.size);
+        RepetitionTester* tester = &tester_;
+        CloseHandle(openedInputFile.handle);
+
+        while (!repeatShouldStop(tester)) tempMemBlock(arena) {
+
+            repeatBeginTime(tester);
+            OpenedFile file = openFile(inputPath);
+            u8arr content = readAndCloseFile(arena, file);
+            repeatEndTime(tester);
+
+            assert(tester->expectedSize == (u64)content.len);
+        }
+
+        repeatPrint(tester);
+    }
+
     tempMemBlock(arena) {
         OpenedFile openedInputFile = openFile(inputPath);
         profileThroughput("read input", openedInputFile.size) {
-            u8arr inputContent = readEntireFile(arena, openedInputFile);
+            u8arr inputContent = readAndCloseFile(arena, openedInputFile);
         }
     }
 
