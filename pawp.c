@@ -514,7 +514,7 @@ int main() {
         // TODO(khvorov) Write out reference values as well I guess
     }
 
-    bool repeatTestReadFile = true;
+    bool repeatTestReadFile = false;
     if (repeatTestReadFile) {
         OpenedFile openedInputFile = openFile(inputPath);
         RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, openedInputFile.size);
@@ -529,6 +529,24 @@ int main() {
             repeatEndTime(tester);
 
             assert(tester->expectedSize == (u64)content.len);
+        }
+
+        repeatPrint(tester);
+    }
+
+    bool repeatTestWriteToMem = true;
+    if (repeatTestWriteToMem) tempMemBlock(arena) {
+        i64 bufSize = 100 * Megabyte;
+        u8* buf = arenaAllocArray(arena, u8, bufSize);
+        RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize);
+        RepetitionTester* tester = &tester_;
+
+        while (!repeatShouldStop(tester)) {
+            repeatBeginTime(tester);
+            for (i64 ind = 0; ind < bufSize; ind++) {
+                buf[ind] = ind;
+            }
+            repeatEndTime(tester);
         }
 
         repeatPrint(tester);
