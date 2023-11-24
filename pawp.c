@@ -538,18 +538,67 @@ int main() {
     if (repeatTestWriteToMem) tempMemBlock(arena) {
         i64 bufSize = 100 * Megabyte;
         u8* buf = arenaAllocArray(arena, u8, bufSize);
-        RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize);
-        RepetitionTester* tester = &tester_;
 
-        while (!repeatShouldStop(tester)) {
-            repeatBeginTime(tester);
-            for (i64 ind = 0; ind < bufSize; ind++) {
-                buf[ind] = ind;
+        {
+            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize);
+            RepetitionTester* tester = &tester_;
+            while (!repeatShouldStop(tester)) {
+                repeatBeginTime(tester);
+                for (i64 ind = 0; ind < bufSize; ind++) {
+                    buf[ind] = ind;
+                }
+                repeatEndTime(tester);
             }
-            repeatEndTime(tester);
+            repeatPrint(tester);
         }
 
-        repeatPrint(tester);
+        {
+            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize);
+            RepetitionTester* tester = &tester_;
+            while (!repeatShouldStop(tester)) {
+                repeatBeginTime(tester);
+                void MOVAllBytesAsm(void* ptr, i64 bufSize);
+                MOVAllBytesAsm(buf, bufSize);
+                repeatEndTime(tester);
+            }
+            repeatPrint(tester);
+        }
+
+        {
+            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize);
+            RepetitionTester* tester = &tester_;
+            while (!repeatShouldStop(tester)) {
+                repeatBeginTime(tester);
+                void NOPAllBytesAsm(void* ptr, i64 bufSize);
+                NOPAllBytesAsm(buf, bufSize);
+                repeatEndTime(tester);
+            }
+            repeatPrint(tester);
+        }
+
+        {
+            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize);
+            RepetitionTester* tester = &tester_;
+            while (!repeatShouldStop(tester)) {
+                repeatBeginTime(tester);
+                void CMPAllBytesAsm(void* ptr, i64 bufSize);
+                CMPAllBytesAsm(buf, bufSize);
+                repeatEndTime(tester);
+            }
+            repeatPrint(tester);
+        }
+        
+        {
+            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize);
+            RepetitionTester* tester = &tester_;
+            while (!repeatShouldStop(tester)) {
+                repeatBeginTime(tester);
+                void DECAllBytesAsm(void* ptr, i64 bufSize);
+                DECAllBytesAsm(buf, bufSize);
+                repeatEndTime(tester);
+            }
+            repeatPrint(tester);
+        }
     }
 
     tempMemBlock(arena) {
