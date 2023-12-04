@@ -284,6 +284,7 @@ typedef struct Pair { f64 x0, y0, x1, y1; } Pair;
 #pragma comment(lib, "advapi32")
 
 typedef struct RepetitionTester {
+    Str name;
     u64 freqPerSec;
     u64 toWait;
     u64 expectedSize;
@@ -306,8 +307,9 @@ typedef struct RepetitionTester {
 } RepetitionTester;
 
 static RepetitionTester
-createRepetitionTester(u64 freqPerSec, u64 expectedSize) {
+createRepetitionTester(u64 freqPerSec, u64 expectedSize, Str name) {
     RepetitionTester tester = {
+        .name = name,
         .freqPerSec = freqPerSec, .toWait = freqPerSec, .expectedSize = expectedSize, .minDiffTime = UINT64_MAX, .minDiffPF = UINT64_MAX,
         .process = OpenProcess(PROCESS_QUERY_INFORMATION  | PROCESS_VM_READ, FALSE, GetCurrentProcessId())
     };
@@ -368,8 +370,8 @@ repeatPrint(RepetitionTester* tester) {
     f64 maxKBPerPF = sizeKB / (f64)tester->maxDiffPF;
 
     printf(
-        "repeat: min: %.2gs %.2ggb/s %lluPF %.2gKB/PF, max: %.2gs %.2ggb/s %lluPF %.2gKB/PF\n",
-        minSec, minBand, tester->minDiffPF, minKBPerPF, maxSec, maxBand, tester->maxDiffPF, maxKBPerPF
+        "repeat: %.*s min: %.2gs %.2ggb/s %lluPF %.2gKB/PF, max: %.2gs %.2ggb/s %lluPF %.2gKB/PF\n",
+        LIT(tester->name), minSec, minBand, tester->minDiffPF, minKBPerPF, maxSec, maxBand, tester->maxDiffPF, maxKBPerPF
     );
 }
 
@@ -517,7 +519,7 @@ int main() {
     bool repeatTestReadFile = false;
     if (repeatTestReadFile) {
         OpenedFile openedInputFile = openFile(inputPath);
-        RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, openedInputFile.size);
+        RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, openedInputFile.size, STR("Read file"));
         RepetitionTester* tester = &tester_;
         CloseHandle(openedInputFile.handle);
 
@@ -540,7 +542,7 @@ int main() {
         u8* buf = arenaAllocArray(arena, u8, bufSize);
 
         {
-            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize);
+            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("normal loop"));
             RepetitionTester* tester = &tester_;
             while (!repeatShouldStop(tester)) {
                 repeatBeginTime(tester);
@@ -553,7 +555,7 @@ int main() {
         }
 
         {
-            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize);
+            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("MOVAllBytesAsm"));
             RepetitionTester* tester = &tester_;
             while (!repeatShouldStop(tester)) {
                 repeatBeginTime(tester);
@@ -565,19 +567,43 @@ int main() {
         }
 
         {
-            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize);
+            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("NOP3x1AllBytesAsm"));
             RepetitionTester* tester = &tester_;
             while (!repeatShouldStop(tester)) {
                 repeatBeginTime(tester);
-                void NOPAllBytesAsm(void* ptr, i64 bufSize);
-                NOPAllBytesAsm(buf, bufSize);
+                void NOP3x1AllBytesAsm(void* ptr, i64 bufSize);
+                NOP3x1AllBytesAsm(buf, bufSize);
                 repeatEndTime(tester);
             }
             repeatPrint(tester);
         }
 
         {
-            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize);
+            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("NOP1x3AllBytesAsm"));
+            RepetitionTester* tester = &tester_;
+            while (!repeatShouldStop(tester)) {
+                repeatBeginTime(tester);
+                void NOP1x3AllBytesAsm(void* ptr, i64 bufSize);
+                NOP1x3AllBytesAsm(buf, bufSize);
+                repeatEndTime(tester);
+            }
+            repeatPrint(tester);
+        }
+
+        {
+            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("NOP1x9AllBytesAsm"));
+            RepetitionTester* tester = &tester_;
+            while (!repeatShouldStop(tester)) {
+                repeatBeginTime(tester);
+                void NOP1x9AllBytesAsm(void* ptr, i64 bufSize);
+                NOP1x9AllBytesAsm(buf, bufSize);
+                repeatEndTime(tester);
+            }
+            repeatPrint(tester);
+        }
+
+        {
+            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("CMPAllBytesAsm"));
             RepetitionTester* tester = &tester_;
             while (!repeatShouldStop(tester)) {
                 repeatBeginTime(tester);
@@ -589,7 +615,7 @@ int main() {
         }
         
         {
-            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize);
+            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("DECAllBytesAsm"));
             RepetitionTester* tester = &tester_;
             while (!repeatShouldStop(tester)) {
                 repeatBeginTime(tester);
