@@ -4,6 +4,7 @@ global NOP1x3AllBytesAsm
 global NOP1x9AllBytesAsm
 global CMPAllBytesAsm
 global DECAllBytesAsm
+global ConditionalNopAsm
 
 section .text
 
@@ -65,4 +66,17 @@ DECAllBytesAsm:
 .loop:
     dec rdx
 jnz .loop
+    ret
+
+ConditionalNopAsm:
+    xor rax, rax
+.loop:
+    mov r10, [rcx + rax]
+    inc rax
+    test r10, 1
+    jnz .skip
+    nop
+.skip:
+    cmp rax, rdx
+    jne .loop
     ret
