@@ -555,17 +555,17 @@ int main() {
         //     repeatPrint(tester);
         // }
 
-        // {
-        //     RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("MOVAllBytesAsm"));
-        //     RepetitionTester* tester = &tester_;
-        //     while (!repeatShouldStop(tester)) {
-        //         repeatBeginTime(tester);
-        //         void MOVAllBytesAsm(void* ptr, i64 bufSize);
-        //         MOVAllBytesAsm(buf, bufSize);
-        //         repeatEndTime(tester);
-        //     }
-        //     repeatPrint(tester);
-        // }
+        {
+            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("MOVAllBytesAsm"));
+            RepetitionTester* tester = &tester_;
+            while (!repeatShouldStop(tester)) {
+                repeatBeginTime(tester);
+                void MOVAllBytesAsm(void* ptr, i64 bufSize);
+                MOVAllBytesAsm(buf, bufSize);
+                repeatEndTime(tester);
+            }
+            repeatPrint(tester);
+        }
 
         // {
         //     RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("NOP3x1AllBytesAsm"));
@@ -627,85 +627,117 @@ int main() {
         //     repeatPrint(tester);
         // }
 
-        memset(buf, 0, bufSize);
-        {
-            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("ConditionalNopAsm Never taken"));
-            RepetitionTester* tester = &tester_;
-            while (!repeatShouldStop(tester)) {
-                repeatBeginTime(tester);
-                void ConditionalNopAsm(void* ptr, i64 bufSize);
-                ConditionalNopAsm(buf, bufSize);
-                repeatEndTime(tester);
-            }
-            repeatPrint(tester);
-        }
+        // memset(buf, 0, bufSize);
+        // {
+        //     RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("ConditionalNopAsm Never taken"));
+        //     RepetitionTester* tester = &tester_;
+        //     while (!repeatShouldStop(tester)) {
+        //         repeatBeginTime(tester);
+        //         void ConditionalNopAsm(void* ptr, i64 bufSize);
+        //         ConditionalNopAsm(buf, bufSize);
+        //         repeatEndTime(tester);
+        //     }
+        //     repeatPrint(tester);
+        // }
 
-        memset(buf, 1, bufSize);
-        {
-            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("ConditionalNopAsm Always taken"));
-            RepetitionTester* tester = &tester_;
-            while (!repeatShouldStop(tester)) {
-                repeatBeginTime(tester);
-                void ConditionalNopAsm(void* ptr, i64 bufSize);
-                ConditionalNopAsm(buf, bufSize);
-                repeatEndTime(tester);
-            }
-            repeatPrint(tester);
-        }
+        // memset(buf, 1, bufSize);
+        // {
+        //     RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("ConditionalNopAsm Always taken"));
+        //     RepetitionTester* tester = &tester_;
+        //     while (!repeatShouldStop(tester)) {
+        //         repeatBeginTime(tester);
+        //         void ConditionalNopAsm(void* ptr, i64 bufSize);
+        //         ConditionalNopAsm(buf, bufSize);
+        //         repeatEndTime(tester);
+        //     }
+        //     repeatPrint(tester);
+        // }
 
-        memset(buf, 0, bufSize);
-        for (i64 ind = 0; ind < bufSize; ind += 2) {buf[ind] = 1;}
-        {
-            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("ConditionalNopAsm Every 2"));
-            RepetitionTester* tester = &tester_;
-            while (!repeatShouldStop(tester)) {
-                repeatBeginTime(tester);
-                void ConditionalNopAsm(void* ptr, i64 bufSize);
-                ConditionalNopAsm(buf, bufSize);
-                repeatEndTime(tester);
-            }
-            repeatPrint(tester);
-        }
+        // memset(buf, 0, bufSize);
+        // for (i64 ind = 0; ind < bufSize; ind += 2) {buf[ind] = 1;}
+        // {
+        //     RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("ConditionalNopAsm Every 2"));
+        //     RepetitionTester* tester = &tester_;
+        //     while (!repeatShouldStop(tester)) {
+        //         repeatBeginTime(tester);
+        //         void ConditionalNopAsm(void* ptr, i64 bufSize);
+        //         ConditionalNopAsm(buf, bufSize);
+        //         repeatEndTime(tester);
+        //     }
+        //     repeatPrint(tester);
+        // }
 
-        memset(buf, 0, bufSize);
-        for (i64 ind = 0; ind < bufSize; ind += 3) {buf[ind] = 1;}
-        {
-            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("ConditionalNopAsm Every 3"));
-            RepetitionTester* tester = &tester_;
-            while (!repeatShouldStop(tester)) {
-                repeatBeginTime(tester);
-                void ConditionalNopAsm(void* ptr, i64 bufSize);
-                ConditionalNopAsm(buf, bufSize);
-                repeatEndTime(tester);
-            }
-            repeatPrint(tester);
-        }
+        // memset(buf, 0, bufSize);
+        // for (i64 ind = 0; ind < bufSize; ind += 3) {buf[ind] = 1;}
+        // {
+        //     RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("ConditionalNopAsm Every 3"));
+        //     RepetitionTester* tester = &tester_;
+        //     while (!repeatShouldStop(tester)) {
+        //         repeatBeginTime(tester);
+        //         void ConditionalNopAsm(void* ptr, i64 bufSize);
+        //         ConditionalNopAsm(buf, bufSize);
+        //         repeatEndTime(tester);
+        //     }
+        //     repeatPrint(tester);
+        // }
 
-        memset(buf, 0, bufSize);
-        for (i64 ind = 0; ind < bufSize; ind += 4) {buf[ind] = 1;}
-        {
-            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("ConditionalNopAsm Every 4"));
-            RepetitionTester* tester = &tester_;
-            while (!repeatShouldStop(tester)) {
-                repeatBeginTime(tester);
-                void ConditionalNopAsm(void* ptr, i64 bufSize);
-                ConditionalNopAsm(buf, bufSize);
-                repeatEndTime(tester);
-            }
-            repeatPrint(tester);
-        }
+        // memset(buf, 0, bufSize);
+        // for (i64 ind = 0; ind < bufSize; ind += 4) {buf[ind] = 1;}
+        // {
+        //     RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("ConditionalNopAsm Every 4"));
+        //     RepetitionTester* tester = &tester_;
+        //     while (!repeatShouldStop(tester)) {
+        //         repeatBeginTime(tester);
+        //         void ConditionalNopAsm(void* ptr, i64 bufSize);
+        //         ConditionalNopAsm(buf, bufSize);
+        //         repeatEndTime(tester);
+        //     }
+        //     repeatPrint(tester);
+        // }
+
+        // memset(buf, 0, bufSize);
+        // for (i64 ind = 0; ind < bufSize; ind += 1) {
+        //     BCryptGenRandom(0, buf + ind, 1, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+        // }
+        // {
+        //     RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("ConditionalNopAsm Bcrypt"));
+        //     RepetitionTester* tester = &tester_;
+        //     while (!repeatShouldStop(tester)) {
+        //         repeatBeginTime(tester);
+        //         void ConditionalNopAsm(void* ptr, i64 bufSize);
+        //         ConditionalNopAsm(buf, bufSize);
+        //         repeatEndTime(tester);
+        //     }
+        //     repeatPrint(tester);
+        // }
+
+        // memset(buf, 0, bufSize);
+        // for (i64 ind = 0; ind < bufSize; ind += 1) {
+        //     buf[ind] = rand();
+        // }
+        // {
+        //     RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("ConditionalNopAsm rand"));
+        //     RepetitionTester* tester = &tester_;
+        //     while (!repeatShouldStop(tester)) {
+        //         repeatBeginTime(tester);
+        //         void ConditionalNopAsm(void* ptr, i64 bufSize);
+        //         ConditionalNopAsm(buf, bufSize);
+        //         repeatEndTime(tester);
+        //     }
+        //     repeatPrint(tester);
+        // }
 
         memset(buf, 0, bufSize);
         for (i64 ind = 0; ind < bufSize; ind += 1) {
-            BCryptGenRandom(0, buf + ind, 1, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+            buf[ind] = rand();
         }
         {
-            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("ConditionalNopAsm Bcrypt"));
+            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("MOVAllBytesAsmAlign64"));
             RepetitionTester* tester = &tester_;
             while (!repeatShouldStop(tester)) {
                 repeatBeginTime(tester);
-                void ConditionalNopAsm(void* ptr, i64 bufSize);
-                ConditionalNopAsm(buf, bufSize);
+                void MOVAllBytesAsmAlign64(void* ptr, i64 bufSize);
+                MOVAllBytesAsmAlign64(buf, bufSize);
                 repeatEndTime(tester);
             }
             repeatPrint(tester);
@@ -716,12 +748,12 @@ int main() {
             buf[ind] = rand();
         }
         {
-            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("ConditionalNopAsm rand"));
+            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("MOVAllBytesAsmAlign64Nop"));
             RepetitionTester* tester = &tester_;
             while (!repeatShouldStop(tester)) {
                 repeatBeginTime(tester);
-                void ConditionalNopAsm(void* ptr, i64 bufSize);
-                ConditionalNopAsm(buf, bufSize);
+                void MOVAllBytesAsmAlign64Nop(void* ptr, i64 bufSize);
+                MOVAllBytesAsmAlign64Nop(buf, bufSize);
                 repeatEndTime(tester);
             }
             repeatPrint(tester);

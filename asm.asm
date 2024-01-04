@@ -5,11 +5,36 @@ global NOP1x9AllBytesAsm
 global CMPAllBytesAsm
 global DECAllBytesAsm
 global ConditionalNopAsm
+global MOVAllBytesAsmAlign64
+global MOVAllBytesAsmAlign64Nop
 
 section .text
 
 MOVAllBytesAsm:
     xor rax, rax
+.loop:
+    mov byte [rcx + rax], al
+    inc rax
+    cmp rax, rdx
+jne .loop
+    ret
+
+MOVAllBytesAsmAlign64:
+    xor rax, rax
+align 64
+.loop:
+    mov byte [rcx + rax], al
+    inc rax
+    cmp rax, rdx
+jne .loop
+    ret
+
+MOVAllBytesAsmAlign64Nop:
+    xor rax, rax
+align 64
+%rep 59
+nop
+%endrep
 .loop:
     mov byte [rcx + rax], al
     inc rax
