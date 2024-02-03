@@ -7,6 +7,14 @@ global DECAllBytesAsm
 global ConditionalNopAsm
 global MOVAllBytesAsmAlign64
 global MOVAllBytesAsmAlign64Nop
+global StoreManyTimesX1
+global StoreManyTimesX2
+global StoreManyTimesX3
+global StoreManyTimesX4
+global LoadManyTimesX1
+global LoadManyTimesX2
+global LoadManyTimesX3
+global LoadManyTimesX4
 
 section .text
 
@@ -104,4 +112,88 @@ ConditionalNopAsm:
 .skip:
     cmp rax, rdx
     jne .loop
+    ret
+
+StoreManyTimesX1:
+    xor rax, rax
+.loop:
+    mov [rcx], rax
+    inc rax
+    cmp rax, rdx
+jne .loop
+    ret
+
+StoreManyTimesX2:
+    xor rax, rax
+.loop:
+    mov [rcx], rax
+    mov [rcx], rax
+    inc rax
+    cmp rax, rdx
+jne .loop
+    ret
+
+StoreManyTimesX3:
+    xor rax, rax
+.loop:
+    mov [rcx], rax
+    mov [rcx], rax
+    mov [rcx], rax
+    inc rax
+    cmp rax, rdx
+jne .loop
+    ret
+
+StoreManyTimesX4:
+    xor rax, rax
+.loop:
+    mov [rcx], rax
+    mov [rcx], rax
+    mov [rcx], rax
+    mov [rcx], rax
+    inc rax
+    cmp rax, rdx
+jne .loop
+    ret
+
+LoadManyTimesX1:
+    xor rax, rax
+.loop:
+    mov r8, [rcx]
+    inc rax
+    cmp rax, rdx
+jne .loop
+    ret
+
+LoadManyTimesX2:
+    xor rax, rax
+.loop:
+    mov r8, [rcx]
+    mov r8, [rcx]
+    inc rax
+    cmp rax, rdx
+jne .loop
+    ret
+
+LoadManyTimesX3:
+    xor rax, rax
+.loop:
+    mov r8, [rcx]
+    mov r8, [rcx]
+    mov r8, [rcx]
+    inc rax
+    cmp rax, rdx
+jne .loop
+    ret
+
+LoadManyTimesX4:
+    xor rax, rax
+.loop:
+    mov r8, [rcx]
+    mov r8, [rcx]
+    mov r8, [rcx]
+    mov r8, [rcx]
+    inc rax
+    cmp rax, rdx
+jne .loop
     ret
