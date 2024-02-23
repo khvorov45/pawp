@@ -15,6 +15,12 @@ global LoadManyTimesX1
 global LoadManyTimesX2
 global LoadManyTimesX3
 global LoadManyTimesX4
+global StoreManyTimesX2_64
+global StoreManyTimesX2_128
+global LoadManyTimesX2_64
+global LoadManyTimesX2_128
+global LoadManyTimesX2_256
+global LoadManyTimesX2_512
 
 section .text
 
@@ -196,4 +202,64 @@ LoadManyTimesX4:
     inc rax
     cmp rax, rdx
 jne .loop
+    ret
+
+StoreManyTimesX2_64:
+    xor rax, rax
+.loop:
+    mov [rcx], r8
+    mov [rcx + 8], r8
+    add rax, 8
+    cmp rax, rdx
+jne .loop
+    ret
+
+StoreManyTimesX2_128:
+    xor rax, rax
+.loop:
+    movdqu [rcx], xmm0
+    movdqu [rcx + 16], xmm0
+    add rax, 16
+    cmp rax, rdx
+jne .loop
+    ret
+
+LoadManyTimesX2_64:
+    xor rax, rax
+.loop:
+    mov r8, [rcx]
+    mov r8, [rcx + 8]
+    add rax, 8
+    cmp rax, rdx
+jne .loop
+    ret
+
+LoadManyTimesX2_128:
+    xor rax, rax
+.loop:
+    movdqu xmm0, [rcx]
+    movdqu xmm0, [rcx + 16]
+    add rax, 16
+    cmp rax, rdx
+jl .loop
+    ret
+
+LoadManyTimesX2_256:
+    xor rax, rax
+.loop:
+    vmovdqu ymm0, [rcx]
+    vmovdqu ymm0, [rcx + 32]
+    add rax, 32
+    cmp rax, rdx
+jl .loop
+    ret
+
+LoadManyTimesX2_512:
+    xor rax, rax
+.loop:
+    vmovdqu64 zmm0, [rcx]
+    vmovdqu64 zmm0, [rcx + 64]
+    add rax, 64
+    cmp rax, rdx
+jl .loop
     ret

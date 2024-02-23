@@ -823,33 +823,97 @@ int main() {
         //     repeatPrint(tester);
         // }
                 
-        memset(buf, 0, bufSize);
-        for (i64 ind = 0; ind < bufSize; ind += 1) {
-            buf[ind] = rand();
-        }
-        {
-            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("LoadManyTimesX1"));
-            RepetitionTester* tester = &tester_;
-            while (!repeatShouldStop(tester)) {
-                repeatBeginTime(tester);
-                void LoadManyTimesX1(void* ptr, i64 bufSize);
-                LoadManyTimesX1(buf, bufSize);
-                repeatEndTime(tester);
-            }
-            repeatPrint(tester);
-        }
+        // memset(buf, 0, bufSize);
+        // for (i64 ind = 0; ind < bufSize; ind += 1) {
+        //     buf[ind] = rand();
+        // }
+        // {
+        //     RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("LoadManyTimesX1"));
+        //     RepetitionTester* tester = &tester_;
+        //     while (!repeatShouldStop(tester)) {
+        //         repeatBeginTime(tester);
+        //         void LoadManyTimesX1(void* ptr, i64 bufSize);
+        //         LoadManyTimesX1(buf, bufSize);
+        //         repeatEndTime(tester);
+        //     }
+        //     repeatPrint(tester);
+        // }
+                
+        // memset(buf, 0, bufSize);
+        // for (i64 ind = 0; ind < bufSize; ind += 1) {
+        //     buf[ind] = rand();
+        // }
+        // {
+        //     RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("LoadManyTimesX2"));
+        //     RepetitionTester* tester = &tester_;
+        //     while (!repeatShouldStop(tester)) {
+        //         repeatBeginTime(tester);
+        //         void LoadManyTimesX2(void* ptr, i64 bufSize);
+        //         LoadManyTimesX2(buf, bufSize);
+        //         repeatEndTime(tester);
+        //     }
+        //     repeatPrint(tester);
+        // }
+                        
+        // memset(buf, 0, bufSize);
+        // for (i64 ind = 0; ind < bufSize; ind += 1) {
+        //     buf[ind] = rand();
+        // }
+        // {
+        //     RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("LoadManyTimesX3"));
+        //     RepetitionTester* tester = &tester_;
+        //     while (!repeatShouldStop(tester)) {
+        //         repeatBeginTime(tester);
+        //         void LoadManyTimesX3(void* ptr, i64 bufSize);
+        //         LoadManyTimesX3(buf, bufSize);
+        //         repeatEndTime(tester);
+        //     }
+        //     repeatPrint(tester);
+        // }
+                                
+        // memset(buf, 0, bufSize);
+        // for (i64 ind = 0; ind < bufSize; ind += 1) {
+        //     buf[ind] = rand();
+        // }
+        // {
+        //     RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("LoadManyTimesX4"));
+        //     RepetitionTester* tester = &tester_;
+        //     while (!repeatShouldStop(tester)) {
+        //         repeatBeginTime(tester);
+        //         void LoadManyTimesX4(void* ptr, i64 bufSize);
+        //         LoadManyTimesX4(buf, bufSize);
+        //         repeatEndTime(tester);
+        //     }
+        //     repeatPrint(tester);
+        // }
                 
         memset(buf, 0, bufSize);
         for (i64 ind = 0; ind < bufSize; ind += 1) {
             buf[ind] = rand();
         }
         {
-            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("LoadManyTimesX2"));
+            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("StoreManyTimesX2_64"));
             RepetitionTester* tester = &tester_;
             while (!repeatShouldStop(tester)) {
                 repeatBeginTime(tester);
-                void LoadManyTimesX2(void* ptr, i64 bufSize);
-                LoadManyTimesX2(buf, bufSize);
+                void StoreManyTimesX2_64(void* ptr, i64 bufSize);
+                StoreManyTimesX2_64(buf, bufSize);
+                repeatEndTime(tester);
+            }
+            repeatPrint(tester);
+        }
+                                        
+        memset(buf, 0, bufSize);
+        for (i64 ind = 0; ind < bufSize; ind += 1) {
+            buf[ind] = rand();
+        }
+        {
+            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("StoreManyTimesX2_128"));
+            RepetitionTester* tester = &tester_;
+            while (!repeatShouldStop(tester)) {
+                repeatBeginTime(tester);
+                void StoreManyTimesX2_128(void* ptr, i64 bufSize);
+                StoreManyTimesX2_128(buf, bufSize);
                 repeatEndTime(tester);
             }
             repeatPrint(tester);
@@ -860,12 +924,28 @@ int main() {
             buf[ind] = rand();
         }
         {
-            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("LoadManyTimesX3"));
+            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("LoadManyTimesX2_64"));
             RepetitionTester* tester = &tester_;
             while (!repeatShouldStop(tester)) {
                 repeatBeginTime(tester);
-                void LoadManyTimesX3(void* ptr, i64 bufSize);
-                LoadManyTimesX3(buf, bufSize);
+                void LoadManyTimesX2_64(void* ptr, i64 bufSize);
+                LoadManyTimesX2_64(buf, bufSize);
+                repeatEndTime(tester);
+            }
+            repeatPrint(tester);
+        }
+                                        
+        memset(buf, 0, bufSize);
+        for (i64 ind = 0; ind < bufSize; ind += 1) {
+            buf[ind] = rand();
+        }
+        {
+            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("LoadManyTimesX2_128"));
+            RepetitionTester* tester = &tester_;
+            while (!repeatShouldStop(tester)) {
+                repeatBeginTime(tester);
+                void LoadManyTimesX2_128(void* ptr, i64 bufSize);
+                LoadManyTimesX2_128(buf, bufSize);
                 repeatEndTime(tester);
             }
             repeatPrint(tester);
@@ -876,12 +956,28 @@ int main() {
             buf[ind] = rand();
         }
         {
-            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("LoadManyTimesX4"));
+            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("LoadManyTimesX2_256"));
             RepetitionTester* tester = &tester_;
             while (!repeatShouldStop(tester)) {
                 repeatBeginTime(tester);
-                void LoadManyTimesX4(void* ptr, i64 bufSize);
-                LoadManyTimesX4(buf, bufSize);
+                void LoadManyTimesX2_256(void* ptr, i64 bufSize);
+                LoadManyTimesX2_256(buf, bufSize);
+                repeatEndTime(tester);
+            }
+            repeatPrint(tester);
+        }
+                                        
+        memset(buf, 0, bufSize);
+        for (i64 ind = 0; ind < bufSize; ind += 1) {
+            buf[ind] = rand();
+        }
+        {
+            RepetitionTester tester_ = createRepetitionTester(rdtscFrequencyPerSecond, bufSize, STR("LoadManyTimesX2_512"));
+            RepetitionTester* tester = &tester_;
+            while (!repeatShouldStop(tester)) {
+                repeatBeginTime(tester);
+                void LoadManyTimesX2_512(void* ptr, i64 bufSize);
+                LoadManyTimesX2_512(buf, bufSize);
                 repeatEndTime(tester);
             }
             repeatPrint(tester);
