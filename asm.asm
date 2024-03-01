@@ -21,6 +21,7 @@ global LoadManyTimesX2_64
 global LoadManyTimesX2_128
 global LoadManyTimesX2_256
 global LoadManyTimesX2_512
+global BandwidthTest
 
 section .text
 
@@ -260,6 +261,22 @@ LoadManyTimesX2_512:
     vmovdqu64 zmm0, [rcx]
     vmovdqu64 zmm0, [rcx + 64]
     add rax, 64
+    cmp rax, rdx
+jl .loop
+    ret
+
+BandwidthTest:
+    xor rax, rax
+    mov r9, rcx
+.loop:
+    vmovdqu ymm0, [r9]
+    vmovdqu ymm0, [r9 + 32]
+    vmovdqu ymm0, [r9 + 32 + 32]
+    vmovdqu ymm0, [r9 + 32 + 32 + 32]
+    add rax, 128
+    mov r9, rax
+    and r9, r8
+    add r9, rcx
     cmp rax, rdx
 jl .loop
     ret
